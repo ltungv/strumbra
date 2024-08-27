@@ -12,21 +12,13 @@
 
 mod heap;
 
-use std::{cmp, mem::ManuallyDrop};
+use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
 use heap::{DynBytes, SharedDynBytes, UniqueDynBytes};
 
 const INLINED_LENGTH: usize = 12;
 const PREFIX_LENGTH: usize = 4;
 const SUFFIX_LENGTH: usize = 8;
-
-/// An Umbra-style string that owns its underlying bytes and does not share the bytes among
-/// different instances.
-pub type UniqueString = UmbraString<UniqueDynBytes>;
-
-/// An Umbra-style string that shares its underlying bytes and keeps track of the number of
-/// references using an atomic counter.
-pub type SharedString = UmbraString<SharedDynBytes>;
 
 /// An error type for all possible errors that can occur when using [`UmbraString`].
 #[derive(Debug)]
@@ -60,6 +52,14 @@ unsafe impl<B> Send for Tail<B> where B: DynBytes + Send {}
 // + If the heap-allocated content is `Sync` then `Repr` is `Sync`.
 unsafe impl<B> Sync for Tail<B> where B: DynBytes + Sync {}
 
+/// An Umbra-style string that owns its underlying bytes and does not share the bytes among
+/// different instances.
+pub type UniqueString = UmbraString<UniqueDynBytes>;
+
+/// An Umbra-style string that shares its underlying bytes and keeps track of the number of
+/// references using an atomic counter.
+pub type SharedString = UmbraString<SharedDynBytes>;
+
 /// A string data structure optimized for analytical processing workload. Unlike [`String`], which
 /// uses 24 bytes on the stack, this data structure uses only 16 bytes and is immutable.
 #[repr(C)]
@@ -71,23 +71,13 @@ pub struct UmbraString<B: DynBytes> {
 
 // Safety:
 // + `len` is always copied.
-// + `UniqueDynBytes` is `Send`.
-unsafe impl Send for UmbraString<UniqueDynBytes> {}
+// + The heap-allocated bytes are `Send`.
+unsafe impl<B> Send for UmbraString<B> where B: DynBytes + Send {}
 
 // Safety:
 // + `len` is immutable.
-// + `UniqueDynBytes` is `Sync`.
-unsafe impl Sync for UmbraString<UniqueDynBytes> {}
-
-// Safety:
-// + `len` is always copied.
-// + `SharedDynBytes` is `Send`.
-unsafe impl Send for UmbraString<SharedDynBytes> {}
-
-// Safety:
-// + `len` is immutable.
-// + `SharedDynBytes` is `Sync`.
-unsafe impl Sync for UmbraString<SharedDynBytes> {}
+// + The heap-allocated bytes are `Sync`.
+unsafe impl<B> Sync for UmbraString<B> where B: DynBytes + Sync {}
 
 impl<B> Drop for UmbraString<B>
 where
@@ -162,7 +152,10 @@ impl Clone for UmbraString<SharedDynBytes> {
     }
 }
 
-impl TryFrom<&str> for UmbraString<UniqueDynBytes> {
+impl<B> TryFrom<&str> for UmbraString<B>
+where
+    B: DynBytes,
+{
     type Error = Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
@@ -170,15 +163,10 @@ impl TryFrom<&str> for UmbraString<UniqueDynBytes> {
     }
 }
 
-impl TryFrom<&str> for UmbraString<SharedDynBytes> {
-    type Error = Error;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::new(s)
-    }
-}
-
-impl TryFrom<String> for UmbraString<UniqueDynBytes> {
+impl<B> TryFrom<String> for UmbraString<B>
+where
+    B: DynBytes,
+{
     type Error = Error;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
@@ -186,10 +174,13 @@ impl TryFrom<String> for UmbraString<UniqueDynBytes> {
     }
 }
 
-impl TryFrom<String> for UmbraString<SharedDynBytes> {
+impl<B> TryFrom<&String> for UmbraString<B>
+where
+    B: DynBytes,
+{
     type Error = Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> Result<Self, Self::Error> {
         Self::new(s)
     }
 }
@@ -216,6 +207,27 @@ where
     }
 }
 
+impl<B> Borrow<str> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<B> std::hash::Hash for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: std::hash::Hasher,
+    {
+        self.as_str().hash(hasher);
+    }
+}
+
 impl<B> Eq for UmbraString<B> where B: DynBytes {}
 impl<B1, B2> PartialEq<UmbraString<B2>> for UmbraString<B1>
 where
@@ -239,6 +251,100 @@ where
             }
         }
         self.suffix() == other.suffix()
+    }
+}
+
+impl<B> PartialEq<[u8]> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &[u8]) -> bool {
+        let prefix_len = other.len().min(PREFIX_LENGTH);
+        let mut prefix = [0u8; PREFIX_LENGTH];
+        prefix[..prefix_len].copy_from_slice(&other[..prefix_len]);
+        if self.head != prefix {
+            return false;
+        }
+        let len = self.len as usize;
+        if len <= PREFIX_LENGTH && other.len() <= PREFIX_LENGTH {
+            return true;
+        }
+        if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
+            let suffix_len = other.len() - PREFIX_LENGTH;
+            let mut suffix = [0u8; SUFFIX_LENGTH];
+            suffix[..suffix_len].copy_from_slice(&other[PREFIX_LENGTH..]);
+            // Safety:
+            // + We know that the string is inlined because len <= INLINED_LENGTH.
+            unsafe {
+                return self.tail.suffix == suffix;
+            }
+        }
+        self.suffix() == &other[PREFIX_LENGTH..]
+    }
+}
+
+impl<B> PartialEq<UmbraString<B>> for &[u8]
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &UmbraString<B>) -> bool {
+        let prefix_len = self.len().min(PREFIX_LENGTH);
+        let mut prefix = [0u8; PREFIX_LENGTH];
+        prefix[..prefix_len].copy_from_slice(&self[..prefix_len]);
+        if prefix != other.head {
+            return false;
+        }
+        let len = other.len as usize;
+        if self.len() <= PREFIX_LENGTH && len <= PREFIX_LENGTH {
+            return true;
+        }
+        if self.len() <= INLINED_LENGTH && len <= INLINED_LENGTH {
+            let suffix_len = self.len() - PREFIX_LENGTH;
+            let mut suffix = [0u8; SUFFIX_LENGTH];
+            suffix[..suffix_len].copy_from_slice(&self[PREFIX_LENGTH..]);
+            // Safety:
+            // + We know that the string is inlined because len <= INLINED_LENGTH.
+            unsafe {
+                return suffix == other.tail.suffix;
+            }
+        }
+        &self[PREFIX_LENGTH..] == other.suffix()
+    }
+}
+
+impl<B> PartialEq<str> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &str) -> bool {
+        self == other.as_bytes()
+    }
+}
+
+impl<B> PartialEq<UmbraString<B>> for &str
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &UmbraString<B>) -> bool {
+        self.as_bytes() == *other
+    }
+}
+
+impl<B> PartialEq<String> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_bytes()
+    }
+}
+
+impl<B> PartialEq<UmbraString<B>> for String
+where
+    B: DynBytes,
+{
+    fn eq(&self, other: &UmbraString<B>) -> bool {
+        self.as_bytes() == *other
     }
 }
 
@@ -275,6 +381,100 @@ where
             Ord::cmp(self.suffix(), other.suffix())
         });
         Some(ordering)
+    }
+}
+
+impl<B> PartialOrd<[u8]> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &[u8]) -> Option<cmp::Ordering> {
+        let prefix_len = other.len().min(PREFIX_LENGTH);
+        let mut prefix = [0u8; PREFIX_LENGTH];
+        prefix[..prefix_len].copy_from_slice(&other[..prefix_len]);
+        let ordering = Ord::cmp(&self.head, &prefix).then_with(|| {
+            let len = self.len as usize;
+            if len <= PREFIX_LENGTH && other.len() <= PREFIX_LENGTH {
+                return cmp::Ordering::Equal;
+            }
+            if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
+                let suffix_len = other.len() - PREFIX_LENGTH;
+                let mut suffix = [0u8; SUFFIX_LENGTH];
+                suffix[..suffix_len].copy_from_slice(&other[PREFIX_LENGTH..]);
+                // Safety:
+                // + We know that the string is inlined because len <= INLINED_LENGTH.
+                unsafe {
+                    return Ord::cmp(&self.tail.suffix, &suffix);
+                }
+            }
+            Ord::cmp(self.suffix(), &other[PREFIX_LENGTH..])
+        });
+        Some(ordering)
+    }
+}
+
+impl<B> PartialOrd<UmbraString<B>> for &[u8]
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
+        let prefix_len = self.len().min(PREFIX_LENGTH);
+        let mut prefix = [0u8; PREFIX_LENGTH];
+        prefix[..prefix_len].copy_from_slice(&self[..prefix_len]);
+        let ordering = Ord::cmp(&prefix, &other.head).then_with(|| {
+            let len = other.len as usize;
+            if self.len() <= PREFIX_LENGTH && len <= PREFIX_LENGTH {
+                return cmp::Ordering::Equal;
+            }
+            if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
+                let suffix_len = self.len() - PREFIX_LENGTH;
+                let mut suffix = [0u8; SUFFIX_LENGTH];
+                suffix[..suffix_len].copy_from_slice(&self[PREFIX_LENGTH..]);
+                // Safety:
+                // + We know that the string is inlined because len <= INLINED_LENGTH.
+                unsafe {
+                    return Ord::cmp(&suffix, &other.tail.suffix);
+                }
+            }
+            Ord::cmp(&self[PREFIX_LENGTH..], other.suffix())
+        });
+        Some(ordering)
+    }
+}
+
+impl<B> PartialOrd<str> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
+        PartialOrd::partial_cmp(self, other.as_bytes())
+    }
+}
+
+impl<B> PartialOrd<UmbraString<B>> for &str
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
+        PartialOrd::partial_cmp(&self.as_bytes(), other)
+    }
+}
+
+impl<B> PartialOrd<String> for UmbraString<B>
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
+        PartialOrd::partial_cmp(self, other.as_bytes())
+    }
+}
+
+impl<B> PartialOrd<UmbraString<B>> for String
+where
+    B: DynBytes,
+{
+    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
+        PartialOrd::partial_cmp(&self.as_bytes(), other)
     }
 }
 

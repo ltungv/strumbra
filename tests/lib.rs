@@ -99,6 +99,24 @@ fn test_eq(s: String) {
 
 #[quickcheck]
 #[cfg_attr(miri, ignore)]
+fn test_eq_str(s: String) {
+    let unique = UniqueString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    let shared = SharedString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(s.as_str(), unique);
+    assert_eq!(s.as_str(), shared);
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_eq_string(s: String) {
+    let unique = UniqueString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    let shared = SharedString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(s, unique);
+    assert_eq!(s, shared);
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
 fn test_ne(s1: String, s2: String) {
     let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
     let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
@@ -108,6 +126,32 @@ fn test_ne(s1: String, s2: String) {
     assert_ne!(lhs_unique, rhs_shared);
     assert_ne!(lhs_shared, rhs_unique);
     assert_ne!(lhs_shared, rhs_shared);
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_ne_str(s1: String, s2: String) {
+    let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    let lhs_shared = SharedString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_shared = SharedString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    assert_ne!(s1.as_str(), rhs_unique);
+    assert_ne!(s1.as_str(), rhs_shared);
+    assert_ne!(lhs_unique, *s2.as_str());
+    assert_ne!(lhs_shared, *s2.as_str());
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_ne_string(s1: String, s2: String) {
+    let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    let lhs_shared = SharedString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_shared = SharedString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    assert_ne!(s1, rhs_unique);
+    assert_ne!(s1, rhs_shared);
+    assert_ne!(lhs_unique, s2);
+    assert_ne!(lhs_shared, s2);
 }
 
 #[quickcheck]
@@ -123,6 +167,28 @@ fn test_cmp_same(s: String) {
 
 #[quickcheck]
 #[cfg_attr(miri, ignore)]
+fn test_cmp_same_str(s: String) {
+    let unique = UniqueString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    let shared = SharedString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(Some(cmp::Ordering::Equal), unique.partial_cmp(s.as_str()));
+    assert_eq!(Some(cmp::Ordering::Equal), shared.partial_cmp(s.as_str()));
+    assert_eq!(Some(cmp::Ordering::Equal), s.as_str().partial_cmp(&unique));
+    assert_eq!(Some(cmp::Ordering::Equal), s.as_str().partial_cmp(&shared));
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_cmp_same_string(s: String) {
+    let unique = UniqueString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    let shared = SharedString::try_from(s.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(Some(cmp::Ordering::Equal), unique.partial_cmp(&s));
+    assert_eq!(Some(cmp::Ordering::Equal), shared.partial_cmp(&s));
+    assert_eq!(Some(cmp::Ordering::Equal), s.partial_cmp(&unique));
+    assert_eq!(Some(cmp::Ordering::Equal), s.partial_cmp(&shared));
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
 fn test_cmp_diff(s1: String, s2: String) {
     let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
     let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
@@ -132,4 +198,30 @@ fn test_cmp_diff(s1: String, s2: String) {
     assert_eq!(s1.cmp(&s2), lhs_shared.cmp(&rhs_shared));
     assert_eq!(s1.partial_cmp(&s2), lhs_unique.partial_cmp(&rhs_shared));
     assert_eq!(s1.partial_cmp(&s2), lhs_shared.partial_cmp(&rhs_unique));
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_cmp_diff_str(s1: String, s2: String) {
+    let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    let lhs_shared = SharedString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_shared = SharedString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(s1.partial_cmp(&s2), s1.as_str().partial_cmp(&rhs_unique));
+    assert_eq!(s1.partial_cmp(&s2), s1.as_str().partial_cmp(&rhs_shared));
+    assert_eq!(s1.partial_cmp(&s2), lhs_unique.partial_cmp(s2.as_str()));
+    assert_eq!(s1.partial_cmp(&s2), lhs_shared.partial_cmp(s2.as_str()));
+}
+
+#[quickcheck]
+#[cfg_attr(miri, ignore)]
+fn test_cmp_diff_string(s1: String, s2: String) {
+    let lhs_unique = UniqueString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    let lhs_shared = SharedString::try_from(s1.as_str()).expect("A valid Umbra-style string");
+    let rhs_shared = SharedString::try_from(s2.as_str()).expect("A valid Umbra-style string");
+    assert_eq!(s1.partial_cmp(&s2), s1.partial_cmp(&rhs_unique));
+    assert_eq!(s1.partial_cmp(&s2), s1.partial_cmp(&rhs_shared));
+    assert_eq!(s1.partial_cmp(&s2), lhs_unique.partial_cmp(&s2));
+    assert_eq!(s1.partial_cmp(&s2), lhs_shared.partial_cmp(&s2));
 }
