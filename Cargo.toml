@@ -3,6 +3,14 @@ name = "strumbra"
 version = "0.1.0"
 edition = "2021"
 
+description = "An implementation for Umbra-style strings (also known as German strings)"
+categories = ["data-structures"]
+keywords = ["german-string", "umbra-string", "cache-friendly", "olap"]
+
+repository = "https://gitlab.com/ltungv/strumbra"
+license = "MIT"
+license_file = "LICENSE"
+
 [[bench]]
 name = "benches"
 harness = false

@@ -4,6 +4,7 @@
 
 #![warn(
     rustdoc::all,
+    clippy::cargo,
     clippy::pedantic,
     clippy::nursery,
     missing_debug_implementations
