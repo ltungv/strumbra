@@ -100,8 +100,8 @@ fn test_eq(s: String) {
 fn test_eq_str(s: String) {
     let unique = UniqueString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let shared = SharedString::try_from(s.as_str()).expect("A valid Umbra-style string");
-    assert_eq!(s.as_str(), unique);
-    assert_eq!(s.as_str(), shared);
+    assert_eq!(s.as_str(), &unique);
+    assert_eq!(s.as_str(), &shared);
 }
 
 #[quickcheck]
@@ -133,10 +133,10 @@ fn test_ne_str(s1: String, s2: String) {
     let rhs_unique = UniqueString::try_from(s2.as_str()).expect("A valid Umbra-style string");
     let lhs_shared = SharedString::try_from(s1.as_str()).expect("A valid Umbra-style string");
     let rhs_shared = SharedString::try_from(s2.as_str()).expect("A valid Umbra-style string");
-    assert_ne!(s1.as_str(), rhs_unique);
-    assert_ne!(s1.as_str(), rhs_shared);
-    assert_ne!(lhs_unique, *s2.as_str());
-    assert_ne!(lhs_shared, *s2.as_str());
+    assert_ne!(s1.as_str(), &rhs_unique);
+    assert_ne!(s1.as_str(), &rhs_shared);
+    assert_ne!(&lhs_unique, s2.as_str());
+    assert_ne!(&lhs_shared, s2.as_str());
 }
 
 #[quickcheck]

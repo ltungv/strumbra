@@ -264,57 +264,19 @@ impl<B> PartialEq<[u8]> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &[u8]) -> bool {
-        let prefix_len = other.len().min(PREFIX_LENGTH);
-        let mut prefix = [0u8; PREFIX_LENGTH];
-        prefix[..prefix_len].copy_from_slice(&other[..prefix_len]);
-        if self.head != prefix {
-            return false;
-        }
-        let len = self.len as usize;
-        if len <= PREFIX_LENGTH && other.len() <= PREFIX_LENGTH {
-            return true;
-        }
-        if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
-            let suffix_len = other.len() - PREFIX_LENGTH;
-            let mut suffix = [0u8; SUFFIX_LENGTH];
-            suffix[..suffix_len].copy_from_slice(&other[PREFIX_LENGTH..]);
-            // Safety:
-            // + We know that the string is inlined because len <= INLINED_LENGTH.
-            unsafe {
-                return self.tail.suffix == suffix;
-            }
-        }
-        self.suffix() == &other[PREFIX_LENGTH..]
+        self.as_bytes() == other
     }
 }
 
-impl<B> PartialEq<UmbraString<B>> for &[u8]
+impl<B> PartialEq<UmbraString<B>> for [u8]
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
-        let prefix_len = self.len().min(PREFIX_LENGTH);
-        let mut prefix = [0u8; PREFIX_LENGTH];
-        prefix[..prefix_len].copy_from_slice(&self[..prefix_len]);
-        if prefix != other.head {
-            return false;
-        }
-        let len = other.len as usize;
-        if self.len() <= PREFIX_LENGTH && len <= PREFIX_LENGTH {
-            return true;
-        }
-        if self.len() <= INLINED_LENGTH && len <= INLINED_LENGTH {
-            let suffix_len = self.len() - PREFIX_LENGTH;
-            let mut suffix = [0u8; SUFFIX_LENGTH];
-            suffix[..suffix_len].copy_from_slice(&self[PREFIX_LENGTH..]);
-            // Safety:
-            // + We know that the string is inlined because len <= INLINED_LENGTH.
-            unsafe {
-                return suffix == other.tail.suffix;
-            }
-        }
-        &self[PREFIX_LENGTH..] == other.suffix()
+        self == other.as_bytes()
     }
 }
 
@@ -328,13 +290,13 @@ where
     }
 }
 
-impl<B> PartialEq<UmbraString<B>> for &str
+impl<B> PartialEq<UmbraString<B>> for str
 where
     B: DynBytes,
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
-        self.as_bytes() == *other
+        self.as_bytes() == other
     }
 }
 
@@ -354,7 +316,7 @@ where
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
-        self.as_bytes() == *other
+        self.as_bytes() == other
     }
 }
 
@@ -399,57 +361,19 @@ impl<B> PartialOrd<[u8]> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &[u8]) -> Option<cmp::Ordering> {
-        let prefix_len = other.len().min(PREFIX_LENGTH);
-        let mut prefix = [0u8; PREFIX_LENGTH];
-        prefix[..prefix_len].copy_from_slice(&other[..prefix_len]);
-        let ordering = Ord::cmp(&self.head, &prefix).then_with(|| {
-            let len = self.len as usize;
-            if len <= PREFIX_LENGTH && other.len() <= PREFIX_LENGTH {
-                return cmp::Ordering::Equal;
-            }
-            if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
-                let suffix_len = other.len() - PREFIX_LENGTH;
-                let mut suffix = [0u8; SUFFIX_LENGTH];
-                suffix[..suffix_len].copy_from_slice(&other[PREFIX_LENGTH..]);
-                // Safety:
-                // + We know that the string is inlined because len <= INLINED_LENGTH.
-                unsafe {
-                    return Ord::cmp(&self.tail.suffix, &suffix);
-                }
-            }
-            Ord::cmp(self.suffix(), &other[PREFIX_LENGTH..])
-        });
-        Some(ordering)
+        PartialOrd::partial_cmp(self.as_bytes(), other)
     }
 }
 
-impl<B> PartialOrd<UmbraString<B>> for &[u8]
+impl<B> PartialOrd<UmbraString<B>> for [u8]
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        let prefix_len = self.len().min(PREFIX_LENGTH);
-        let mut prefix = [0u8; PREFIX_LENGTH];
-        prefix[..prefix_len].copy_from_slice(&self[..prefix_len]);
-        let ordering = Ord::cmp(&prefix, &other.head).then_with(|| {
-            let len = other.len as usize;
-            if self.len() <= PREFIX_LENGTH && len <= PREFIX_LENGTH {
-                return cmp::Ordering::Equal;
-            }
-            if len <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
-                let suffix_len = self.len() - PREFIX_LENGTH;
-                let mut suffix = [0u8; SUFFIX_LENGTH];
-                suffix[..suffix_len].copy_from_slice(&self[PREFIX_LENGTH..]);
-                // Safety:
-                // + We know that the string is inlined because len <= INLINED_LENGTH.
-                unsafe {
-                    return Ord::cmp(&suffix, &other.tail.suffix);
-                }
-            }
-            Ord::cmp(&self[PREFIX_LENGTH..], other.suffix())
-        });
-        Some(ordering)
+        PartialOrd::partial_cmp(self, other.as_bytes())
     }
 }
 
@@ -463,13 +387,13 @@ where
     }
 }
 
-impl<B> PartialOrd<UmbraString<B>> for &str
+impl<B> PartialOrd<UmbraString<B>> for str
 where
     B: DynBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(&self.as_bytes(), other)
+        PartialOrd::partial_cmp(self.as_bytes(), other)
     }
 }
 
@@ -489,7 +413,7 @@ where
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(&self.as_bytes(), other)
+        PartialOrd::partial_cmp(self.as_bytes(), other)
     }
 }
 
