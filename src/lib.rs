@@ -505,7 +505,8 @@ where
         if len <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
-            unsafe { &self.tail.suffix }
+            let suffix_len = len.saturating_sub(PREFIX_LENGTH);
+            unsafe { self.tail.suffix.get_unchecked(..suffix_len) }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
