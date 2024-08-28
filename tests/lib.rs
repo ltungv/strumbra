@@ -9,9 +9,7 @@ fn test_size_of() {
     assert_eq!(16, std::mem::size_of::<SharedString>());
 }
 
-// NOTE: This is currently mark as UB by miri, so it's ignored. Check the related TODO.
 #[test]
-#[cfg_attr(miri, ignore)]
 fn test_construct_inlined() {
     let unique = UniqueString::try_from("hello world").expect("A valid Umbra-style string");
     let shared = SharedString::try_from("hello world").expect("A valid Umbra-style string");

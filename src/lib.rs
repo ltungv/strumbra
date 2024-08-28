@@ -536,13 +536,15 @@ where
     fn as_bytes(&self) -> &[u8] {
         let len = self.len as usize;
         if len <= INLINED_LENGTH {
-            // TODO: This is currently marked as UB by miri, but it seems fine given our struct
-            // layout. Check if it really is an UB, then provide a fix or a work-around.
+            // Note: If we cast from a reference to a pointer, we can only access memory that was
+            // within the bounds of the reference. This is done to satisfied miri when we create a
+            // slice starting from the pointer of self.head to access data beyond it.
+            let ptr = self as *const Self;
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             // + We can create a slice starting from the pointer to self.head with a length of at
             // most PREFIX_LENGTH by having an inlined suffix of 8 bytes right after the prefix.
-            unsafe { &*std::ptr::slice_from_raw_parts(std::ptr::addr_of!(self.head).cast(), len) }
+            unsafe { &*std::ptr::slice_from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
