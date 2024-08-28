@@ -8,8 +8,7 @@ categories = ["data-structures"]
 keywords = ["german-string", "umbra-string", "cache-friendly", "olap"]
 
 repository = "https://gitlab.com/ltungv/strumbra"
-license = "MIT"
-license_file = "LICENSE"
+license-file = "LICENSE"
 
 [[bench]]
 name = "benches"
