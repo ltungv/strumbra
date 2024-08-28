@@ -5,7 +5,7 @@ edition = "2021"
 
 description = "An implementation for Umbra-style strings (also known as German strings)"
 categories = ["data-structures"]
-keywords = ["german-string", "umbra-string", "cache-friendly", "olap"]
+keywords = ["german-string", "umbra-string", "string"]
 
 repository = "https://gitlab.com/ltungv/strumbra"
 license-file = "LICENSE"
