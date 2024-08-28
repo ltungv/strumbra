@@ -159,6 +159,7 @@ where
 {
     type Error = Error;
 
+    #[inline]
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         Self::new(s)
     }
@@ -170,6 +171,7 @@ where
 {
     type Error = Error;
 
+    #[inline]
     fn try_from(s: String) -> Result<Self, Self::Error> {
         Self::new(s)
     }
@@ -181,6 +183,7 @@ where
 {
     type Error = Error;
 
+    #[inline]
     fn try_from(s: &String) -> Result<Self, Self::Error> {
         Self::new(s)
     }
@@ -212,6 +215,7 @@ impl<B> Borrow<str> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn borrow(&self) -> &str {
         self.as_str()
     }
@@ -221,6 +225,7 @@ impl<B> std::hash::Hash for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn hash<H>(&self, hasher: &mut H)
     where
         H: std::hash::Hasher,
@@ -317,6 +322,7 @@ impl<B> PartialEq<str> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &str) -> bool {
         self == other.as_bytes()
     }
@@ -326,6 +332,7 @@ impl<B> PartialEq<UmbraString<B>> for &str
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
         self.as_bytes() == *other
     }
@@ -335,6 +342,7 @@ impl<B> PartialEq<String> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &String) -> bool {
         self == other.as_bytes()
     }
@@ -344,6 +352,7 @@ impl<B> PartialEq<UmbraString<B>> for String
 where
     B: DynBytes,
 {
+    #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
         self.as_bytes() == *other
     }
@@ -353,6 +362,7 @@ impl<B> Ord for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         // Safety:
         // + It's always possible to compare strings according to our PartialOrd implementation.
@@ -447,6 +457,7 @@ impl<B> PartialOrd<str> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(self, other.as_bytes())
     }
@@ -456,6 +467,7 @@ impl<B> PartialOrd<UmbraString<B>> for &str
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(&self.as_bytes(), other)
     }
@@ -465,6 +477,7 @@ impl<B> PartialOrd<String> for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(self, other.as_bytes())
     }
@@ -474,6 +487,7 @@ impl<B> PartialOrd<UmbraString<B>> for String
 where
     B: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(&self.as_bytes(), other)
     }
