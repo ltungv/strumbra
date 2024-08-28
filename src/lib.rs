@@ -544,7 +544,7 @@ where
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             // + We can create a slice starting from the pointer to self.head with a length of at
             // most PREFIX_LENGTH by having an inlined suffix of 8 bytes right after the prefix.
-            unsafe { &*std::ptr::slice_from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
+            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.

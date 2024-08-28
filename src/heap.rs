@@ -102,7 +102,7 @@ impl DynBytes for UniqueDynBytes {
         // initialized.
         // + We have access to `&self`, thus the bytes have not been deallocated.
         // + We return a slice having the same lifetime as `&self`.
-        NonNull::slice_from_raw_parts(self.ptr, len).as_ref()
+        std::slice::from_raw_parts(self.ptr.as_ptr(), len)
     }
 }
 
@@ -256,11 +256,11 @@ impl DynBytes for SharedDynBytes {
         let fat_ptr = SharedDynBytesInner::<[u8; 0]>::thin_to_fat_ptr(self.ptr.as_ptr(), len);
         // Safety:
         // + We have access to `&self`, thus the pointer has not been deallocated.
-        let data_ptr = unsafe { (*fat_ptr).data.as_ptr() };
-        let slice = std::ptr::slice_from_raw_parts(data_ptr, len);
+        let ptr = unsafe { (*fat_ptr).data.as_ptr() };
         // Safety:
         // + We have access to `&self`, thus the bytes have not been deallocated.
-        unsafe { &*slice }
+        // + We require that the caller passes a valid length for the slice.
+        unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 }
 
