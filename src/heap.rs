@@ -6,8 +6,6 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use crate::PREFIX_LENGTH;
-
 /// Trait for types that represent a heap-allocated byte array.
 ///
 /// # Safety
@@ -16,12 +14,8 @@ use crate::PREFIX_LENGTH;
 ///   array of length zero.
 /// + Because types don't have the information about the length of the heap-allocated byte
 ///   array, the user is responsible for providing a valid length when they access the array.
-pub trait DynBytes {
+pub unsafe trait DynBytes {
     /// Allocate a new byte container.
-    ///
-    /// # Panics
-    ///
-    /// + An out-of-bound access will occur when `bytes.len() < PREFIX_LENGTH`
     ///
     /// # Safety
     ///
@@ -50,20 +44,22 @@ pub struct UniqueDynBytes {
     phantom: PhantomData<u8>,
 }
 
-// Safety:
-// + `UniqueDynBytes` is the only owner of its data.
+/// # Safety:
+///
+/// + `UniqueDynBytes` is the only owner of its data.
 unsafe impl Send for UniqueDynBytes {}
 
-// Safety:
-// + `UniqueDynBytes` is immutable.
+/// # Safety:
+///
+/// + `UniqueDynBytes` is immutable.
 unsafe impl Sync for UniqueDynBytes {}
 
-impl DynBytes for UniqueDynBytes {
+unsafe impl DynBytes for UniqueDynBytes {
     unsafe fn alloc_unchecked(bytes: &[u8]) -> ManuallyDrop<Self> {
-        debug_assert!(bytes.len() > PREFIX_LENGTH);
+        debug_assert!(!bytes.is_empty());
         let layout = array_layout::<u8>(bytes.len());
         // Safety:
-        // + We require the caller to make sure that `bytes.len() > PREFIX_LENGTH`.
+        // + We require the caller to make sure that `bytes.len() > 0`.
         // + We are sure that a non-zero size type is being allocated when `bytes.len() > 0`.
         let nullable = unsafe { std::alloc::alloc(layout) };
         let ptr = NonNull::new(nullable).map_or_else(
@@ -85,7 +81,7 @@ impl DynBytes for UniqueDynBytes {
     }
 
     unsafe fn dealloc_unchecked(&self, len: usize) {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         // Safety:
         // + We only allocate using the default global allocator.
         // + We require that the caller passes in a `len` matching the number of allocated bytes.
@@ -96,7 +92,7 @@ impl DynBytes for UniqueDynBytes {
 
     #[inline]
     unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8] {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         // Safety:
         // + We ensure that the pointer is aligned and the data it points to is properly
         // initialized.
@@ -108,10 +104,10 @@ impl DynBytes for UniqueDynBytes {
 
 impl UniqueDynBytes {
     pub unsafe fn clone(bytes: &Self, len: usize) -> Self {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         let layout = array_layout::<u8>(len);
         // Safety:
-        // + We require the caller to make sure that `bytes.len() > PREFIX_LENGTH`.
+        // + We require the caller to make sure that `bytes.len() > 0`.
         // + We are sure that a non-zero size type is being allocated when `bytes.len() > 0`.
         let nullable = unsafe { std::alloc::alloc(layout) };
         let ptr = NonNull::new(nullable).map_or_else(
@@ -148,10 +144,10 @@ impl<T> SharedDynBytesInner<[T; 0]> {
     ///
     /// + The caller must make sure that `bytes.len() > 0`.
     unsafe fn alloc_unchecked(bytes: &[T]) -> NonNull<Self> {
-        debug_assert!(bytes.len() > PREFIX_LENGTH);
+        debug_assert!(!bytes.is_empty());
         let layout = Self::layout(bytes.len());
         // Safety:
-        // + We require the caller to make sure that `bytes.len() > PREFIX_LENGTH`.
+        // + We require the caller to make sure that `bytes.len() > 0`.
         // + We are sure that a non-zero size type is being allocated when `bytes.len() > 0`.
         let ptr = unsafe { std::alloc::alloc(layout) };
         // Type-casting magic to create a fat pointer to a dynamically sized type.
@@ -186,7 +182,7 @@ impl<T> SharedDynBytesInner<[T; 0]> {
     ///
     /// + The caller must make sure that `len` equals to the number of bytes being allocated.
     unsafe fn dealloc_unchecked(ptr: *mut Self, len: usize) {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         // Safety:
         // + We only allocate using the default global allocator.
         // + We require that the caller passes in a `len` matching the number of allocated bytes.
@@ -216,20 +212,22 @@ pub struct SharedDynBytes {
     phantom: PhantomData<SharedDynBytesInner<[u8; 0]>>,
 }
 
-// Safety:
-// + `SharedDynBytes` keeps track of the number of references to its data using an atomic counter and
-// allows shared ownership across threads.
+/// # Safety:
+///
+/// + `SharedDynBytes` keeps track of the number of references to its data using an atomic counter and
+///   allows shared ownership across threads.
 unsafe impl Send for SharedDynBytes {}
 
-// Safety:
-// + `SharedDynBytes` is immutable.
+/// # Safety:
+///
+/// + `SharedDynBytes` is immutable.
 unsafe impl Sync for SharedDynBytes {}
 
-impl DynBytes for SharedDynBytes {
+unsafe impl DynBytes for SharedDynBytes {
     unsafe fn alloc_unchecked(bytes: &[u8]) -> ManuallyDrop<Self> {
-        debug_assert!(bytes.len() > PREFIX_LENGTH);
+        debug_assert!(!bytes.is_empty());
         // Safety:
-        // + We require the caller to make sure that `bytes.len() > PREFIX_LENGTH`.
+        // + We require the caller to make sure that `bytes.len() > 0`.
         let ptr = unsafe { SharedDynBytesInner::<[u8; 0]>::alloc_unchecked(bytes) };
         ManuallyDrop::new(Self {
             ptr,
@@ -238,7 +236,7 @@ impl DynBytes for SharedDynBytes {
     }
 
     unsafe fn dealloc_unchecked(&self, len: usize) {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         // Safety:
         // + We have access to `&self`, thus the pointer has not been deallocated.
         let inner = unsafe { &*self.ptr.as_ptr() };
@@ -252,7 +250,7 @@ impl DynBytes for SharedDynBytes {
 
     #[inline]
     unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8] {
-        debug_assert!(len > PREFIX_LENGTH);
+        debug_assert!(len > 0);
         let fat_ptr = SharedDynBytesInner::<[u8; 0]>::thin_to_fat_ptr(self.ptr.as_ptr(), len);
         // Safety:
         // + We have access to `&self`, thus the pointer has not been deallocated.

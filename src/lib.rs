@@ -21,7 +21,7 @@ const INLINED_LENGTH: usize = 12;
 const PREFIX_LENGTH: usize = 4;
 const SUFFIX_LENGTH: usize = 8;
 
-/// An error type for all possible errors that can occur when using [`UmbraString`].
+/// A type for all possible errors that can occur when using [`UmbraString`].
 #[derive(Debug)]
 pub enum Error {
     /// An error occurs when converting from a string whose length exceeds the maximum value of a
@@ -43,14 +43,16 @@ union Tail<B: DynBytes> {
     bytes: ManuallyDrop<B>,
 }
 
-// Safety:
-// + Inlined content is always copied.
-// + If the heap-allocated content is `Send` then `Repr` is `Send`.
+/// # Safety:
+///
+/// + Inlined content is always copied.
+/// + The heap-allocated content is `Send`.
 unsafe impl<B> Send for Tail<B> where B: DynBytes + Send {}
 
-// Safety:
-// + Inlined content is immutable.
-// + If the heap-allocated content is `Sync` then `Repr` is `Sync`.
+/// # Safety:
+///
+/// + Inlined content is immutable.
+/// + The heap-allocated content is `Sync`.
 unsafe impl<B> Sync for Tail<B> where B: DynBytes + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
@@ -70,14 +72,16 @@ pub struct UmbraString<B: DynBytes> {
     tail: Tail<B>,
 }
 
-// Safety:
-// + `len` is always copied.
-// + The heap-allocated bytes are `Send`.
+/// # Safety:
+///
+/// + `len` is always copied.
+/// + The heap-allocated bytes are `Send`.
 unsafe impl<B> Send for UmbraString<B> where B: DynBytes + Send {}
 
-// Safety:
-// + `len` is immutable.
-// + The heap-allocated bytes are `Sync`.
+/// # Safety:
+///
+/// + `len` is immutable.
+/// + The heap-allocated bytes are `Sync`.
 unsafe impl<B> Sync for UmbraString<B> where B: DynBytes + Sync {}
 
 impl<B> Drop for UmbraString<B>
@@ -85,7 +89,7 @@ where
     B: DynBytes,
 {
     fn drop(&mut self) {
-        let len = self.len as usize;
+        let len = self.len();
         if len > INLINED_LENGTH {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
@@ -99,7 +103,7 @@ where
 
 impl Clone for UmbraString<UniqueDynBytes> {
     fn clone(&self) -> Self {
-        let len = self.len as usize;
+        let len = self.len();
         let tail = if len <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
@@ -128,7 +132,7 @@ impl Clone for UmbraString<UniqueDynBytes> {
 
 impl Clone for UmbraString<SharedDynBytes> {
     fn clone(&self) -> Self {
-        let tail = if self.len as usize <= INLINED_LENGTH {
+        let tail = if self.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
@@ -244,8 +248,8 @@ where
         if self.head != other.head {
             return false;
         }
-        let lhs_len = self.len as usize;
-        let rhs_len = other.len as usize;
+        let lhs_len = self.len();
+        let rhs_len = other.len();
         if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
             return true;
         }
@@ -339,8 +343,8 @@ where
 {
     fn partial_cmp(&self, other: &UmbraString<B2>) -> Option<cmp::Ordering> {
         let ordering = Ord::cmp(&self.head, &other.head).then_with(|| {
-            let lhs_len = self.len as usize;
-            let rhs_len = other.len as usize;
+            let lhs_len = self.len();
+            let rhs_len = other.len();
             if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
                 return cmp::Ordering::Equal;
             }
@@ -439,6 +443,51 @@ impl<B> UmbraString<B>
 where
     B: DynBytes,
 {
+    /// Returns the length of `self`.
+    ///
+    /// This length is in bytes, not [`char`]s or graphemes. In other words,
+    /// it might not be what a human considers the length of the string.
+    #[inline]
+    pub const fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    /// Returns `true` if `self` has a length of zero bytes.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Converts `self` to a byte slice.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        let len = self.len();
+        if len <= INLINED_LENGTH {
+            // Note: If we cast from a reference to a pointer, we can only access memory that was
+            // within the bounds of the reference. This is done to satisfied miri when we create a
+            // slice starting from the pointer of self.head to access data beyond it.
+            let ptr = self as *const Self;
+            // Safety:
+            // + We know that the string is inlined because len <= INLINED_LENGTH.
+            // + We can create a slice starting from the pointer to self.head with a length of at
+            // most PREFIX_LENGTH by having an inlined suffix of 8 bytes right after the prefix.
+            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
+        } else {
+            // Safety:
+            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
+            // + We never modify `len`, thus it always equals to the number of allocated bytes.
+            unsafe { self.tail.bytes.as_bytes_unchecked(len) }
+        }
+    }
+
+    /// Extracts a string slice containing the entire [`UmbraString`].
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        // Safety:
+        // + We always construct the string using valid UTF-8 bytes.
+        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+
     fn new<S: AsRef<str>>(s: S) -> Result<Self, Error> {
         let s = s.as_ref();
         let len = s.len();
@@ -472,36 +521,8 @@ where
     }
 
     #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        let len = self.len as usize;
-        if len <= INLINED_LENGTH {
-            // Note: If we cast from a reference to a pointer, we can only access memory that was
-            // within the bounds of the reference. This is done to satisfied miri when we create a
-            // slice starting from the pointer of self.head to access data beyond it.
-            let ptr = self as *const Self;
-            // Safety:
-            // + We know that the string is inlined because len <= INLINED_LENGTH.
-            // + We can create a slice starting from the pointer to self.head with a length of at
-            // most PREFIX_LENGTH by having an inlined suffix of 8 bytes right after the prefix.
-            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
-        } else {
-            // Safety:
-            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
-            // + We never modify `len`, thus it always equals to the number of allocated bytes.
-            unsafe { self.tail.bytes.as_bytes_unchecked(len) }
-        }
-    }
-
-    #[inline]
-    fn as_str(&self) -> &str {
-        // Safety:
-        // + We always construct the string using valid UTF-8 bytes.
-        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
-    }
-
-    #[inline]
     fn suffix(&self) -> &[u8] {
-        let len = self.len as usize;
+        let len = self.len();
         if len <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
