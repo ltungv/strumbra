@@ -159,6 +159,7 @@ struct SharedDynBytesInner<T: ?Sized> {
 }
 
 impl<T> SharedDynBytesInner<[T]> {
+    #[inline]
     fn cast(ptr: *mut u8, len: usize) -> *mut Self {
         // Type-casting magic to create a fat pointer to a dynamically sized type.
         let fake_slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
@@ -215,6 +216,13 @@ impl From<&[u8]> for SharedDynBytes {
             ptr,
             phantom: PhantomData,
         }
+    }
+}
+
+impl From<Vec<u8>> for SharedDynBytes {
+    #[inline]
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::from(&bytes[..])
     }
 }
 
@@ -346,6 +354,26 @@ mod tests {
         let shared = SharedDynBytes::from(&data[..]);
         unsafe {
             assert_eq!(&data[..], shared.as_bytes_unchecked(data.len()));
+            shared.dealloc_unchecked(data.len());
+        }
+    }
+
+    #[test]
+    fn test_create_shared_dyn_bytes_from_empty_vec() {
+        let data = Vec::new();
+        let shared = SharedDynBytes::from(data.clone());
+        unsafe {
+            assert_eq!(&data, shared.as_bytes_unchecked(data.len()));
+            shared.dealloc_unchecked(data.len());
+        }
+    }
+
+    #[test]
+    fn test_create_shared_dyn_bytes_from_non_empty_vec() {
+        let data = Vec::from(b"hello world");
+        let shared = SharedDynBytes::from(data.clone());
+        unsafe {
+            assert_eq!(&data, shared.as_bytes_unchecked(data.len()));
             shared.dealloc_unchecked(data.len());
         }
     }
