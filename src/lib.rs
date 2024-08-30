@@ -400,6 +400,7 @@ impl<B> std::fmt::Display for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
@@ -409,6 +410,7 @@ impl<B> std::fmt::Debug for UmbraString<B>
 where
     B: DynBytes,
 {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.as_str())
     }
