@@ -223,12 +223,7 @@ where
         if self.head != other.head {
             return false;
         }
-        let lhs_len = self.len();
-        let rhs_len = other.len();
-        if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
-            return true;
-        }
-        if lhs_len <= INLINED_LENGTH && rhs_len <= INLINED_LENGTH {
+        if self.len() <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
@@ -239,33 +234,13 @@ where
     }
 }
 
-impl<B> PartialEq<[u8]> for UmbraString<B>
-where
-    B: DynBytes,
-{
-    #[inline]
-    fn eq(&self, other: &[u8]) -> bool {
-        self.as_bytes() == other
-    }
-}
-
-impl<B> PartialEq<UmbraString<B>> for [u8]
-where
-    B: DynBytes,
-{
-    #[inline]
-    fn eq(&self, other: &UmbraString<B>) -> bool {
-        self == other.as_bytes()
-    }
-}
-
 impl<B> PartialEq<str> for UmbraString<B>
 where
     B: DynBytes,
 {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        self == other.as_bytes()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -275,7 +250,7 @@ where
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
-        self.as_bytes() == other
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -285,7 +260,7 @@ where
 {
     #[inline]
     fn eq(&self, other: &String) -> bool {
-        self == other.as_bytes()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -295,7 +270,7 @@ where
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
-        self.as_bytes() == other
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -336,33 +311,13 @@ where
     }
 }
 
-impl<B> PartialOrd<[u8]> for UmbraString<B>
-where
-    B: DynBytes,
-{
-    #[inline]
-    fn partial_cmp(&self, other: &[u8]) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self.as_bytes(), other)
-    }
-}
-
-impl<B> PartialOrd<UmbraString<B>> for [u8]
-where
-    B: DynBytes,
-{
-    #[inline]
-    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self, other.as_bytes())
-    }
-}
-
 impl<B> PartialOrd<str> for UmbraString<B>
 where
     B: DynBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self, other.as_bytes())
+        PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 
@@ -372,7 +327,7 @@ where
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self.as_bytes(), other)
+        PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 
@@ -382,7 +337,7 @@ where
 {
     #[inline]
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self, other.as_bytes())
+        PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 
@@ -392,7 +347,7 @@ where
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
-        PartialOrd::partial_cmp(self.as_bytes(), other)
+        PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 

@@ -3,7 +3,7 @@ use strumbra::{SharedString, UniqueString};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::Rng as _;
 
-const INPUT_LENGTHS: [usize; 6] = [4, 8, 12, 16, 32, 64];
+const INPUT_LENGTHS: [usize; 3] = [4, 12, 64];
 
 fn cmp_random(c: &mut Criterion) {
     let mut group = c.benchmark_group("cmp-random");
