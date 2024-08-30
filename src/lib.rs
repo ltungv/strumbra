@@ -45,13 +45,13 @@ union Tail<B: DynBytes> {
 
 /// # Safety:
 ///
-/// + Inlined content is always copied.
+/// + The inlined content is always copied.
 /// + The heap-allocated content is `Send`.
 unsafe impl<B> Send for Tail<B> where B: DynBytes + Send {}
 
 /// # Safety:
 ///
-/// + Inlined content is immutable.
+/// + The inlined content is immutable.
 /// + The heap-allocated content is `Sync`.
 unsafe impl<B> Sync for Tail<B> where B: DynBytes + Sync {}
 
@@ -101,7 +101,10 @@ where
     }
 }
 
-impl Clone for UmbraString<UniqueDynBytes> {
+impl<B> Clone for UmbraString<B>
+where
+    B: DynBytes,
+{
     fn clone(&self) -> Self {
         let len = self.len();
         let tail = if len <= INLINED_LENGTH {
@@ -115,37 +118,9 @@ impl Clone for UmbraString<UniqueDynBytes> {
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
-            // + We never modify `len`, thus it always equals to the number of allocated bytes.
             unsafe {
                 Tail {
-                    bytes: ManuallyDrop::new(UniqueDynBytes::clone(&self.tail.bytes, len)),
-                }
-            }
-        };
-        Self {
-            len: self.len,
-            head: self.head,
-            tail,
-        }
-    }
-}
-
-impl Clone for UmbraString<SharedDynBytes> {
-    fn clone(&self) -> Self {
-        let tail = if self.len() <= INLINED_LENGTH {
-            // Safety:
-            // + We know that the string is inlined because len <= INLINED_LENGTH.
-            unsafe {
-                Tail {
-                    suffix: self.tail.suffix,
-                }
-            }
-        } else {
-            // Safety:
-            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
-            unsafe {
-                Tail {
-                    bytes: ManuallyDrop::new(SharedDynBytes::clone(&self.tail.bytes)),
+                    bytes: ManuallyDrop::new(self.tail.bytes.clone_unchecked(len)),
                 }
             }
         };
@@ -159,37 +134,36 @@ impl Clone for UmbraString<SharedDynBytes> {
 
 impl<B> TryFrom<&str> for UmbraString<B>
 where
-    B: DynBytes,
+    B: DynBytes + for<'a> From<&'a [u8]>,
 {
     type Error = Error;
 
-    #[inline]
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::new(s)
-    }
-}
-
-impl<B> TryFrom<String> for UmbraString<B>
-where
-    B: DynBytes,
-{
-    type Error = Error;
-
-    #[inline]
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::new(s)
+        Self::new(s, |s| B::from(s.as_bytes()))
     }
 }
 
 impl<B> TryFrom<&String> for UmbraString<B>
 where
-    B: DynBytes,
+    B: DynBytes + for<'a> From<&'a [u8]>,
 {
     type Error = Error;
 
     #[inline]
     fn try_from(s: &String) -> Result<Self, Self::Error> {
-        Self::new(s)
+        Self::new(s, |s| B::from(s.as_bytes()))
+    }
+}
+
+impl<B> TryFrom<String> for UmbraString<B>
+where
+    B: DynBytes + From<Vec<u8>>,
+{
+    type Error = Error;
+
+    #[inline]
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::new(s, |s| B::from(s.into_bytes()))
     }
 }
 
@@ -470,7 +444,7 @@ where
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             // + We can create a slice starting from the pointer to self.head with a length of at
-            // most PREFIX_LENGTH by having an inlined suffix of 8 bytes right after the prefix.
+            // most PREFIX_LENGTH because we have an inlined suffix of 8 bytes after the prefix.
             unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
         } else {
             // Safety:
@@ -488,13 +462,16 @@ where
         unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
     }
 
-    fn new<S: AsRef<str>>(s: S) -> Result<Self, Error> {
-        let s = s.as_ref();
-        let len = s.len();
+    fn new<S, A>(s: S, alloc: A) -> Result<Self, Error>
+    where
+        S: AsRef<str>,
+        A: FnOnce(S) -> B,
+    {
+        let bytes = s.as_ref().as_bytes();
+        let len = bytes.len();
         if len > u32::MAX as usize {
             return Err(Error::TooLong);
         }
-        let bytes = s.as_bytes();
         let mut head = [0u8; PREFIX_LENGTH];
         let tail = if len <= INLINED_LENGTH {
             let mut suffix = [0u8; SUFFIX_LENGTH];
@@ -507,10 +484,9 @@ where
             Tail { suffix }
         } else {
             head.copy_from_slice(&bytes[..PREFIX_LENGTH]);
-            // Safety:
-            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
-            let bytes = unsafe { B::alloc_unchecked(bytes) };
-            Tail { bytes }
+            Tail {
+                bytes: ManuallyDrop::new(alloc(s)),
+            }
         };
         #[allow(clippy::cast_possible_truncation)]
         Ok(Self {
