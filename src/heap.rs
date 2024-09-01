@@ -17,21 +17,21 @@ pub unsafe trait DynBytes {
     ///
     /// # Safety
     ///
-    /// + The caller must make sure that `len` equals to the number of bytes being allocated.
+    /// + The caller must ensure that `len` equals the number of allocated bytes.
     unsafe fn dealloc_unchecked(&self, len: usize);
 
     /// Clone a byte container.
     ///
     /// # Safety
     ///
-    /// + The caller must make sure that `len` equals to the number of bytes being allocated.
+    /// + The caller must ensure that `len` equals the number of allocated bytes.
     unsafe fn clone_unchecked(&self, len: usize) -> Self;
 
     /// Get a slice to the underlying bytes.
     ///
     /// # Safety
     ///
-    /// + The caller must make sure that `len` equals to the number of bytes being allocated.
+    /// + The caller must ensure that `len` equals the number of allocated bytes.
     unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8];
 }
 
