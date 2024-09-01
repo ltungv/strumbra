@@ -38,22 +38,22 @@ impl std::fmt::Display for Error {
     }
 }
 
-union Tail<B: DynBytes> {
-    suffix: [u8; SUFFIX_LENGTH],
-    bytes: ManuallyDrop<B>,
+union Trailing<B: DynBytes> {
+    buf: [u8; SUFFIX_LENGTH],
+    ptr: ManuallyDrop<B>,
 }
 
 /// # Safety:
 ///
 /// + The inlined content is always copied.
 /// + The heap-allocated content is `Send`.
-unsafe impl<B> Send for Tail<B> where B: DynBytes + Send {}
+unsafe impl<B> Send for Trailing<B> where B: DynBytes + Send {}
 
 /// # Safety:
 ///
 /// + The inlined content is immutable.
 /// + The heap-allocated content is `Sync`.
-unsafe impl<B> Sync for Tail<B> where B: DynBytes + Sync {}
+unsafe impl<B> Sync for Trailing<B> where B: DynBytes + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
@@ -68,8 +68,8 @@ pub type SharedString = UmbraString<SharedDynBytes>;
 #[repr(C)]
 pub struct UmbraString<B: DynBytes> {
     len: u32,
-    head: [u8; PREFIX_LENGTH],
-    tail: Tail<B>,
+    prefix: [u8; PREFIX_LENGTH],
+    trailing: Trailing<B>,
 }
 
 /// # Safety:
@@ -95,7 +95,7 @@ where
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
             unsafe {
-                self.tail.bytes.dealloc_unchecked(len);
+                self.trailing.ptr.dealloc_unchecked(len);
             }
         }
     }
@@ -107,27 +107,27 @@ where
 {
     fn clone(&self) -> Self {
         let len = self.len();
-        let tail = if len <= INLINED_LENGTH {
+        let trailing = if len <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
-                Tail {
-                    suffix: self.tail.suffix,
+                Trailing {
+                    buf: self.trailing.buf,
                 }
             }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             unsafe {
-                Tail {
-                    bytes: ManuallyDrop::new(self.tail.bytes.clone_unchecked(len)),
+                Trailing {
+                    ptr: ManuallyDrop::new(self.trailing.ptr.clone_unchecked(len)),
                 }
             }
         };
         Self {
             len: self.len,
-            head: self.head,
-            tail,
+            prefix: self.prefix,
+            trailing,
         }
     }
 }
@@ -220,14 +220,14 @@ where
     B2: DynBytes,
 {
     fn eq(&self, other: &UmbraString<B2>) -> bool {
-        if self.head != other.head {
+        if self.prefix != other.prefix {
             return false;
         }
         if self.len() <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
-                return self.tail.suffix == other.tail.suffix;
+                return self.trailing.buf == other.trailing.buf;
             }
         }
         self.suffix() == other.suffix()
@@ -292,7 +292,7 @@ where
     B2: DynBytes,
 {
     fn partial_cmp(&self, other: &UmbraString<B2>) -> Option<cmp::Ordering> {
-        let ordering = Ord::cmp(&self.head, &other.head).then_with(|| {
+        let ordering = Ord::cmp(&self.prefix, &other.prefix).then_with(|| {
             let lhs_len = self.len();
             let rhs_len = other.len();
             if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
@@ -302,7 +302,7 @@ where
                 // Safety:
                 // + We know that the string is inlined because len <= INLINED_LENGTH.
                 unsafe {
-                    return Ord::cmp(&self.tail.suffix, &other.tail.suffix);
+                    return Ord::cmp(&self.trailing.buf, &other.trailing.buf);
                 }
             }
             Ord::cmp(self.suffix(), other.suffix())
@@ -397,18 +397,18 @@ where
         if len <= INLINED_LENGTH {
             // Note: If we cast from a reference to a pointer, we can only access memory that was
             // within the bounds of the reference. This is done to satisfied miri when we create a
-            // slice starting from the pointer of self.head to access data beyond it.
+            // slice starting from the pointer of self.prefix to access data beyond it.
             let ptr = self as *const Self;
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
-            // + We can create a slice starting from the pointer to self.head with a length of at
+            // + We can create a slice starting from the pointer to self.prefix with a length of at
             // most PREFIX_LENGTH because we have an inlined suffix of 8 bytes after the prefix.
-            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).head).cast(), len) }
+            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).prefix).cast(), len) }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
-            unsafe { self.tail.bytes.as_bytes_unchecked(len) }
+            unsafe { self.trailing.ptr.as_bytes_unchecked(len) }
         }
     }
 
@@ -430,27 +430,27 @@ where
         if len > u32::MAX as usize {
             return Err(Error::TooLong);
         }
-        let mut head = [0u8; PREFIX_LENGTH];
-        let tail = if len <= INLINED_LENGTH {
-            let mut suffix = [0u8; SUFFIX_LENGTH];
+        let mut prefix = [0u8; PREFIX_LENGTH];
+        let trailing = if len <= INLINED_LENGTH {
+            let mut buf = [0u8; SUFFIX_LENGTH];
             if len <= PREFIX_LENGTH {
-                head[..len].copy_from_slice(&bytes[..len]);
+                prefix[..len].copy_from_slice(&bytes[..len]);
             } else {
-                head.copy_from_slice(&bytes[..PREFIX_LENGTH]);
-                suffix[..len - PREFIX_LENGTH].copy_from_slice(&bytes[PREFIX_LENGTH..]);
+                prefix.copy_from_slice(&bytes[..PREFIX_LENGTH]);
+                buf[..len - PREFIX_LENGTH].copy_from_slice(&bytes[PREFIX_LENGTH..]);
             }
-            Tail { suffix }
+            Trailing { buf }
         } else {
-            head.copy_from_slice(&bytes[..PREFIX_LENGTH]);
-            Tail {
-                bytes: ManuallyDrop::new(alloc(s)),
+            prefix.copy_from_slice(&bytes[..PREFIX_LENGTH]);
+            Trailing {
+                ptr: ManuallyDrop::new(alloc(s)),
             }
         };
         #[allow(clippy::cast_possible_truncation)]
         Ok(Self {
             len: len as u32,
-            head,
-            tail,
+            prefix,
+            trailing,
         })
     }
 
@@ -461,15 +461,15 @@ where
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             let suffix_len = len.saturating_sub(PREFIX_LENGTH);
-            unsafe { self.tail.suffix.get_unchecked(..suffix_len) }
+            unsafe { self.trailing.buf.get_unchecked(..suffix_len) }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
             // + We can slice into the bytes without bound checks because len > PREFIX_LENGTH.
             unsafe {
-                self.tail
-                    .bytes
+                self.trailing
+                    .ptr
                     .as_bytes_unchecked(len)
                     .get_unchecked(PREFIX_LENGTH..)
             }
