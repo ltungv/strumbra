@@ -160,7 +160,7 @@ struct SharedDynBytesInner<T: ?Sized> {
 
 impl<T> SharedDynBytesInner<[T]> {
     #[inline]
-    fn cast(ptr: *mut u8, len: usize) -> *mut Self {
+    fn cast(ptr: *mut T, len: usize) -> *mut Self {
         // Type-casting magic to create a fat pointer to a dynamically sized type.
         let fake_slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
         fake_slice as *mut Self
@@ -171,7 +171,7 @@ impl<T> SharedDynBytesInner<[T]> {
 #[allow(missing_debug_implementations)]
 pub struct SharedDynBytes {
     ptr: NonNull<SharedDynBytesInner<[u8; 0]>>,
-    phantom: PhantomData<SharedDynBytesInner<[u8; 0]>>,
+    phantom: PhantomData<SharedDynBytesInner<[u8]>>,
 }
 
 /// # Safety:
