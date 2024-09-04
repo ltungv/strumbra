@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "strumbra"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "criterion",
  "quickcheck",
