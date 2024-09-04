@@ -220,17 +220,21 @@ where
     B2: DynBytes,
 {
     fn eq(&self, other: &UmbraString<B2>) -> bool {
-        let lhs_len = self.len();
-        let rhs_len = other.len();
-        if self.prefix != other.prefix || lhs_len != rhs_len {
+        let lhs_first_qword = std::ptr::from_ref(self).cast::<u64>();
+        let rhs_first_qword = std::ptr::from_ref(other).cast::<u64>();
+        // Safety:
+        // + The pointers are obtained from the given references and guaranteed to be non-null and
+        // properly aligned.
+        // + The first QWORD contains the string length and prefix based on the layout, guaranteed
+        // by `#[repr(C)]`.
+        // + The referenced objects are immutable and are not changed concurrently.
+        if unsafe { *lhs_first_qword != *rhs_first_qword } {
             return false;
         }
-        if lhs_len <= INLINED_LENGTH {
+        if self.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
-            unsafe {
-                return self.trailing.buf == other.trailing.buf;
-            }
+            return unsafe { self.trailing.buf == other.trailing.buf };
         }
         self.suffix() == other.suffix()
     }
@@ -282,9 +286,7 @@ where
 {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        // Safety:
-        // + It's always possible to compare strings according to our PartialOrd implementation.
-        unsafe { PartialOrd::partial_cmp(self, other).unwrap_unchecked() }
+        Self::cmp(self, other)
     }
 }
 
@@ -293,22 +295,9 @@ where
     B1: DynBytes,
     B2: DynBytes,
 {
+    #[inline]
     fn partial_cmp(&self, other: &UmbraString<B2>) -> Option<cmp::Ordering> {
-        let ordering = Ord::cmp(&self.prefix, &other.prefix).then_with(|| {
-            let lhs_len = self.len();
-            let rhs_len = other.len();
-            if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
-                return Ord::cmp(&self.len, &other.len);
-            }
-            if lhs_len <= INLINED_LENGTH && rhs_len <= INLINED_LENGTH {
-                // Safety:
-                // + We know that the string is inlined because len <= INLINED_LENGTH.
-                let ordering = unsafe { Ord::cmp(&self.trailing.buf, &other.trailing.buf) };
-                return ordering.then_with(|| Ord::cmp(&self.len, &other.len));
-            }
-            Ord::cmp(self.suffix(), other.suffix())
-        });
-        Some(ordering)
+        Some(Self::cmp(self, other))
     }
 }
 
@@ -399,7 +388,7 @@ where
             // Note: If we cast from a reference to a pointer, we can only access memory that was
             // within the bounds of the reference. This is done to satisfied miri when we create a
             // slice starting from the pointer of self.prefix to access data beyond it.
-            let ptr = self as *const Self;
+            let ptr = std::ptr::from_ref(self);
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             // + We can create a slice starting from the pointer to self.prefix with a length of at
@@ -475,6 +464,31 @@ where
                     .get_unchecked(PREFIX_LENGTH..)
             }
         }
+    }
+
+    fn cmp<BB>(lhs: &Self, rhs: &UmbraString<BB>) -> cmp::Ordering
+    where
+        BB: DynBytes,
+    {
+        let prefix_ordering = Ord::cmp(&lhs.prefix, &rhs.prefix);
+        if prefix_ordering != cmp::Ordering::Equal {
+            return prefix_ordering;
+        }
+        let lhs_len = lhs.len();
+        let rhs_len = rhs.len();
+        if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
+            return Ord::cmp(&lhs.len, &rhs.len);
+        }
+        if lhs_len <= INLINED_LENGTH && rhs_len <= INLINED_LENGTH {
+            // Safety:
+            // + We know that the string is inlined because len <= INLINED_LENGTH.
+            let suffix_ordering = unsafe { Ord::cmp(&lhs.trailing.buf, &rhs.trailing.buf) };
+            if suffix_ordering != cmp::Ordering::Equal {
+                return suffix_ordering;
+            }
+            return Ord::cmp(&lhs.len, &rhs.len);
+        }
+        Ord::cmp(lhs.suffix(), rhs.suffix())
     }
 }
 
