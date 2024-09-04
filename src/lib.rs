@@ -220,10 +220,12 @@ where
     B2: DynBytes,
 {
     fn eq(&self, other: &UmbraString<B2>) -> bool {
-        if self.prefix != other.prefix {
+        let lhs_len = self.len();
+        let rhs_len = other.len();
+        if self.prefix != other.prefix || lhs_len != rhs_len {
             return false;
         }
-        if self.len() <= INLINED_LENGTH && other.len() <= INLINED_LENGTH {
+        if lhs_len <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
@@ -296,14 +298,13 @@ where
             let lhs_len = self.len();
             let rhs_len = other.len();
             if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
-                return cmp::Ordering::Equal;
+                return Ord::cmp(&self.len, &other.len);
             }
             if lhs_len <= INLINED_LENGTH && rhs_len <= INLINED_LENGTH {
                 // Safety:
                 // + We know that the string is inlined because len <= INLINED_LENGTH.
-                unsafe {
-                    return Ord::cmp(&self.trailing.buf, &other.trailing.buf);
-                }
+                let ordering = unsafe { Ord::cmp(&self.trailing.buf, &other.trailing.buf) };
+                return ordering.then_with(|| Ord::cmp(&self.len, &other.len));
             }
             Ord::cmp(self.suffix(), other.suffix())
         });
@@ -544,6 +545,48 @@ mod tests {
         for handle in handles {
             handle.join().expect("Thread finishes successfully");
         }
+    }
+
+    #[test]
+    fn test_eq_string_different_length_with_null_byte() {
+        let assert = |lhs: &str, rhs: &str| {
+            let unique_lhs = UniqueString::try_from(lhs).expect("A valid Umbra-style string");
+            let unique_rhs = UniqueString::try_from(rhs).expect("A valid Umbra-style string");
+            let shared_lhs = SharedString::try_from(lhs).expect("A valid Umbra-style string");
+            let shared_rhs = SharedString::try_from(rhs).expect("A valid Umbra-style string");
+            assert_ne!(unique_lhs, unique_rhs);
+            assert_ne!(unique_lhs, shared_rhs);
+            assert_ne!(shared_lhs, shared_rhs);
+            assert_ne!(shared_lhs, unique_rhs);
+        };
+        assert("abc", "abc\0");
+        assert("abc\0", "abc");
+        assert("abcdefghijk", "abcdefghijk\0");
+        assert("abcdefghijk\0", "abcdefghijk");
+    }
+
+    #[test]
+    fn test_cmp_string_different_length_with_null_byte() {
+        let assert = |lhs: &str, rhs: &str| {
+            let unique_lhs = UniqueString::try_from(lhs).expect("A valid Umbra-style string");
+            let unique_rhs = UniqueString::try_from(rhs).expect("A valid Umbra-style string");
+            let shared_lhs = SharedString::try_from(lhs).expect("A valid Umbra-style string");
+            let shared_rhs = SharedString::try_from(rhs).expect("A valid Umbra-style string");
+            assert_eq!(Ord::cmp(lhs, rhs), Ord::cmp(&unique_lhs, &unique_rhs));
+            assert_eq!(
+                PartialOrd::partial_cmp(lhs, rhs),
+                PartialOrd::partial_cmp(&unique_lhs, &shared_rhs)
+            );
+            assert_eq!(Ord::cmp(lhs, rhs), Ord::cmp(&shared_lhs, &shared_rhs));
+            assert_eq!(
+                PartialOrd::partial_cmp(lhs, rhs),
+                PartialOrd::partial_cmp(&shared_lhs, &unique_rhs)
+            );
+        };
+        assert("abc", "abc\0");
+        assert("abc\0", "abc");
+        assert("abcdefghijk", "abcdefghijk\0");
+        assert("abcdefghijk\0", "abcdefghijk");
     }
 
     #[quickcheck]
