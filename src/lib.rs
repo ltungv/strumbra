@@ -11,6 +11,9 @@
 )]
 #![deny(clippy::all, missing_docs, rust_2018_idioms, rust_2021_compatibility)]
 
+#[cfg(feature = "serde")]
+pub mod serde;
+
 mod heap;
 
 use std::{borrow::Borrow, cmp, mem::ManuallyDrop};

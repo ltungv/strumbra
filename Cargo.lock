@@ -500,6 +500,7 @@ dependencies = [
  "quickcheck",
  "quickcheck_macros",
  "rand",
+ "serde",
 ]
 
 [[package]]
