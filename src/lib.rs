@@ -92,13 +92,12 @@ where
     B: ThinDrop,
 {
     fn drop(&mut self) {
-        let len = self.len();
-        if len > INLINED_LENGTH {
+        if self.len() > INLINED_LENGTH {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
             unsafe {
-                self.trailing.ptr.thin_drop(len);
+                self.trailing.ptr.thin_drop(self.len());
             }
         }
     }
@@ -109,8 +108,7 @@ where
     B: ThinDrop + ThinClone,
 {
     fn clone(&self) -> Self {
-        let len = self.len();
-        let trailing = if len <= INLINED_LENGTH {
+        let trailing = if self.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
@@ -123,7 +121,7 @@ where
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             unsafe {
                 Trailing {
-                    ptr: ManuallyDrop::new(self.trailing.ptr.thin_clone(len)),
+                    ptr: ManuallyDrop::new(self.trailing.ptr.thin_clone(self.len())),
                 }
             }
         };
@@ -424,8 +422,7 @@ where
     /// Converts `self` to a byte slice.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        let len = self.len();
-        if len <= INLINED_LENGTH {
+        if self.len() <= INLINED_LENGTH {
             // Note: If we cast from a reference to a pointer, we can only access memory that was
             // within the bounds of the reference. This is done to satisfied miri when we create a
             // slice starting from the pointer of self.prefix to access data beyond it.
@@ -434,12 +431,14 @@ where
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             // + We can create a slice starting from the pointer to self.prefix with a length of at
             // most PREFIX_LENGTH because we have an inlined suffix of 8 bytes after the prefix.
-            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).prefix).cast(), len) }
+            unsafe {
+                std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).prefix).cast(), self.len())
+            }
         } else {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
-            unsafe { self.trailing.ptr.thin_as_bytes(len) }
+            unsafe { self.trailing.ptr.thin_as_bytes(self.len()) }
         }
     }
 
@@ -453,11 +452,10 @@ where
 
     #[inline]
     fn suffix(&self) -> &[u8] {
-        let len = self.len();
-        if len <= INLINED_LENGTH {
+        if self.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
-            let suffix_len = len.saturating_sub(PREFIX_LENGTH);
+            let suffix_len = self.len().saturating_sub(PREFIX_LENGTH);
             unsafe { self.trailing.buf.get_unchecked(..suffix_len) }
         } else {
             // Safety:
@@ -467,7 +465,7 @@ where
             unsafe {
                 self.trailing
                     .ptr
-                    .thin_as_bytes(len)
+                    .thin_as_bytes(self.len())
                     .get_unchecked(PREFIX_LENGTH..)
             }
         }
@@ -481,12 +479,10 @@ where
         if prefix_ordering != cmp::Ordering::Equal {
             return prefix_ordering;
         }
-        let lhs_len = lhs.len();
-        let rhs_len = rhs.len();
-        if lhs_len <= PREFIX_LENGTH && rhs_len <= PREFIX_LENGTH {
+        if lhs.len() <= PREFIX_LENGTH && rhs.len() <= PREFIX_LENGTH {
             return Ord::cmp(&lhs.len, &rhs.len);
         }
-        if lhs_len <= INLINED_LENGTH && rhs_len <= INLINED_LENGTH {
+        if lhs.len() <= INLINED_LENGTH && rhs.len() <= INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             let suffix_ordering = unsafe { Ord::cmp(&lhs.trailing.buf, &rhs.trailing.buf) };
