@@ -5,27 +5,32 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-/// Trait for thin pointer to a slice that can be dropped using a user-provided length.
+/// Trait for thin pointer to an array that can be dropped using a user-provided length.
 ///
 /// # Safety
 ///
 /// Types that implement this trait must correctly use the user-provided length.
 pub unsafe trait ThinDrop {
-    /// Deallocate a byte container through a thin pointer.
+    /// Drop the underlying buffer through a thin pointer.
     ///
     /// # Safety
     ///
     /// + The caller must ensure that `len` equals the number of allocated bytes.
+    /// + The caller must ensure that the object will never be accessed once this method is called.
+    ///   Accessing the object after calling this method may result in a use-after-free.
+    /// + The caller must ensure the this method is called exactly once through out the lifetime of
+    ///   the program. Not calling this method will result in a memory leak. Calling this method
+    ///   more than once may result in a double-free.
     unsafe fn thin_drop(&self, len: usize);
 }
 
-/// Trait for thin pointer to a slice that can be cloned using a user-provided length.
+/// Trait for thin pointer to an array that can be cloned using a user-provided length.
 ///
 /// # Safety
 ///
 /// Types that implement this trait must correctly use the user-provided length.
 pub unsafe trait ThinClone {
-    /// Clone a byte container through a thin pointer.
+    /// Clone the underlying buffer through a thin pointer.
     ///
     /// # Safety
     ///
@@ -33,14 +38,13 @@ pub unsafe trait ThinClone {
     unsafe fn thin_clone(&self, len: usize) -> Self;
 }
 
-/// Trait for thin pointer to a slice that can be turned into a reference using a user-provided
-/// length.
+/// Trait for thin pointer to an array that can be referenced using a user-provided length.
 ///
 /// # Safety
 ///
 /// Types that implement this trait must correctly use the user-provided length.
 pub unsafe trait ThinAsBytes {
-    /// Get a slice to the underlying bytes through a thin pointer.
+    /// Slice into the underlying buffer through a thin pointer.
     ///
     /// # Safety
     ///
