@@ -4,7 +4,7 @@ use std::{fmt, marker::PhantomData};
 
 use crate::{
     heap::{ThinAsBytes, ThinDrop},
-    UmbraString,
+    SharedString, UmbraString, UniqueString,
 };
 
 struct Visitor<B>(PhantomData<B>);
@@ -53,15 +53,21 @@ where
     }
 }
 
-impl<'de, B> serde::Deserialize<'de> for UmbraString<B>
-where
-    B: ThinDrop + From<Vec<u8>> + for<'b> From<&'b [u8]>,
-{
+impl<'de> serde::Deserialize<'de> for UniqueString {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_string(Visitor(PhantomData))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SharedString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(Visitor(PhantomData))
     }
 }
 
