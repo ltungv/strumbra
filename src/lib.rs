@@ -18,7 +18,7 @@ mod heap;
 
 use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
-use heap::{DynBytes, SharedDynBytes, UniqueDynBytes};
+use heap::{SharedDynBytes, ThinAsBytes, ThinClone, ThinDrop, UniqueDynBytes};
 
 const INLINED_LENGTH: usize = 12;
 const PREFIX_LENGTH: usize = 4;
@@ -41,7 +41,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-union Trailing<B: DynBytes> {
+union Trailing<B> {
     buf: [u8; SUFFIX_LENGTH],
     ptr: ManuallyDrop<B>,
 }
@@ -50,13 +50,13 @@ union Trailing<B: DynBytes> {
 ///
 /// + The inlined content is always copied.
 /// + The heap-allocated content is `Send`.
-unsafe impl<B> Send for Trailing<B> where B: DynBytes + Send {}
+unsafe impl<B> Send for Trailing<B> where B: Send {}
 
 /// # Safety:
 ///
 /// + The inlined content is immutable.
 /// + The heap-allocated content is `Sync`.
-unsafe impl<B> Sync for Trailing<B> where B: DynBytes + Sync {}
+unsafe impl<B> Sync for Trailing<B> where B: Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
@@ -69,7 +69,7 @@ pub type SharedString = UmbraString<SharedDynBytes>;
 /// A string data structure optimized for analytical processing workload. Unlike [`String`], which
 /// uses 24 bytes on the stack, this data structure uses only 16 bytes and is immutable.
 #[repr(C)]
-pub struct UmbraString<B: DynBytes> {
+pub struct UmbraString<B: ThinDrop> {
     len: u32,
     prefix: [u8; PREFIX_LENGTH],
     trailing: Trailing<B>,
@@ -79,17 +79,17 @@ pub struct UmbraString<B: DynBytes> {
 ///
 /// + `len` is always copied.
 /// + The heap-allocated bytes are `Send`.
-unsafe impl<B> Send for UmbraString<B> where B: DynBytes + Send {}
+unsafe impl<B> Send for UmbraString<B> where B: ThinDrop + Send {}
 
 /// # Safety:
 ///
 /// + `len` is immutable.
 /// + The heap-allocated bytes are `Sync`.
-unsafe impl<B> Sync for UmbraString<B> where B: DynBytes + Sync {}
+unsafe impl<B> Sync for UmbraString<B> where B: ThinDrop + Sync {}
 
 impl<B> Drop for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop,
 {
     fn drop(&mut self) {
         let len = self.len();
@@ -98,7 +98,7 @@ where
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
             unsafe {
-                self.trailing.ptr.dealloc_unchecked(len);
+                self.trailing.ptr.thin_drop(len);
             }
         }
     }
@@ -106,7 +106,7 @@ where
 
 impl<B> Clone for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinClone,
 {
     fn clone(&self) -> Self {
         let len = self.len();
@@ -123,7 +123,7 @@ where
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             unsafe {
                 Trailing {
-                    ptr: ManuallyDrop::new(self.trailing.ptr.clone_unchecked(len)),
+                    ptr: ManuallyDrop::new(self.trailing.ptr.thin_clone(len)),
                 }
             }
         };
@@ -137,7 +137,7 @@ where
 
 impl<B> TryFrom<&str> for UmbraString<B>
 where
-    B: DynBytes + for<'a> From<&'a [u8]>,
+    B: ThinDrop + for<'a> From<&'a [u8]>,
 {
     type Error = Error;
 
@@ -149,7 +149,7 @@ where
 
 impl<B> TryFrom<&String> for UmbraString<B>
 where
-    B: DynBytes + for<'a> From<&'a [u8]>,
+    B: ThinDrop + for<'a> From<&'a [u8]>,
 {
     type Error = Error;
 
@@ -161,7 +161,7 @@ where
 
 impl<B> TryFrom<String> for UmbraString<B>
 where
-    B: DynBytes + From<Vec<u8>>,
+    B: ThinDrop + From<Vec<u8>>,
 {
     type Error = Error;
 
@@ -173,7 +173,7 @@ where
 
 impl<B> std::ops::Deref for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     type Target = str;
 
@@ -185,7 +185,7 @@ where
 
 impl<B> AsRef<str> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn as_ref(&self) -> &str {
@@ -195,7 +195,7 @@ where
 
 impl<B> Borrow<str> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn borrow(&self) -> &str {
@@ -205,7 +205,7 @@ where
 
 impl<B> std::hash::Hash for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn hash<H>(&self, hasher: &mut H)
@@ -216,11 +216,11 @@ where
     }
 }
 
-impl<B> Eq for UmbraString<B> where B: DynBytes {}
+impl<B> Eq for UmbraString<B> where B: ThinDrop + ThinAsBytes {}
 impl<B1, B2> PartialEq<UmbraString<B2>> for UmbraString<B1>
 where
-    B1: DynBytes,
-    B2: DynBytes,
+    B1: ThinDrop + ThinAsBytes,
+    B2: ThinDrop + ThinAsBytes,
 {
     fn eq(&self, other: &UmbraString<B2>) -> bool {
         let lhs_first_qword = std::ptr::from_ref(self).cast::<u64>();
@@ -245,7 +245,7 @@ where
 
 impl<B> PartialEq<str> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn eq(&self, other: &str) -> bool {
@@ -255,7 +255,7 @@ where
 
 impl<B> PartialEq<UmbraString<B>> for str
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
@@ -265,7 +265,7 @@ where
 
 impl<B> PartialEq<String> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn eq(&self, other: &String) -> bool {
@@ -275,7 +275,7 @@ where
 
 impl<B> PartialEq<UmbraString<B>> for String
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn eq(&self, other: &UmbraString<B>) -> bool {
@@ -285,7 +285,7 @@ where
 
 impl<B> Ord for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
@@ -295,8 +295,8 @@ where
 
 impl<B1, B2> PartialOrd<UmbraString<B2>> for UmbraString<B1>
 where
-    B1: DynBytes,
-    B2: DynBytes,
+    B1: ThinDrop + ThinAsBytes,
+    B2: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B2>) -> Option<cmp::Ordering> {
@@ -306,7 +306,7 @@ where
 
 impl<B> PartialOrd<str> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
@@ -316,7 +316,7 @@ where
 
 impl<B> PartialOrd<UmbraString<B>> for str
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
@@ -326,7 +326,7 @@ where
 
 impl<B> PartialOrd<String> for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
@@ -336,7 +336,7 @@ where
 
 impl<B> PartialOrd<UmbraString<B>> for String
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
@@ -346,7 +346,7 @@ where
 
 impl<B> std::fmt::Display for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -356,7 +356,7 @@ where
 
 impl<B> std::fmt::Debug for UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop + ThinAsBytes,
 {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -366,7 +366,7 @@ where
 
 impl<B> UmbraString<B>
 where
-    B: DynBytes,
+    B: ThinDrop,
 {
     /// Returns the length of `self`.
     ///
@@ -381,36 +381,6 @@ where
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.len == 0
-    }
-
-    /// Converts `self` to a byte slice.
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        let len = self.len();
-        if len <= INLINED_LENGTH {
-            // Note: If we cast from a reference to a pointer, we can only access memory that was
-            // within the bounds of the reference. This is done to satisfied miri when we create a
-            // slice starting from the pointer of self.prefix to access data beyond it.
-            let ptr = std::ptr::from_ref(self);
-            // Safety:
-            // + We know that the string is inlined because len <= INLINED_LENGTH.
-            // + We can create a slice starting from the pointer to self.prefix with a length of at
-            // most PREFIX_LENGTH because we have an inlined suffix of 8 bytes after the prefix.
-            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).prefix).cast(), len) }
-        } else {
-            // Safety:
-            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
-            // + We never modify `len`, thus it always equals to the number of allocated bytes.
-            unsafe { self.trailing.ptr.as_bytes_unchecked(len) }
-        }
-    }
-
-    /// Extracts a string slice containing the entire [`UmbraString`].
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        // Safety:
-        // + We always construct the string using valid UTF-8 bytes.
-        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
     }
 
     fn new<S, A>(s: S, alloc: A) -> Result<Self, Error>
@@ -446,6 +416,40 @@ where
             trailing,
         })
     }
+}
+impl<B> UmbraString<B>
+where
+    B: ThinDrop + ThinAsBytes,
+{
+    /// Converts `self` to a byte slice.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        let len = self.len();
+        if len <= INLINED_LENGTH {
+            // Note: If we cast from a reference to a pointer, we can only access memory that was
+            // within the bounds of the reference. This is done to satisfied miri when we create a
+            // slice starting from the pointer of self.prefix to access data beyond it.
+            let ptr = std::ptr::from_ref(self);
+            // Safety:
+            // + We know that the string is inlined because len <= INLINED_LENGTH.
+            // + We can create a slice starting from the pointer to self.prefix with a length of at
+            // most PREFIX_LENGTH because we have an inlined suffix of 8 bytes after the prefix.
+            unsafe { std::slice::from_raw_parts(std::ptr::addr_of!((*ptr).prefix).cast(), len) }
+        } else {
+            // Safety:
+            // + We know that the string is heap-allocated because len > INLINED_LENGTH.
+            // + We never modify `len`, thus it always equals to the number of allocated bytes.
+            unsafe { self.trailing.ptr.thin_as_bytes(len) }
+        }
+    }
+
+    /// Extracts a string slice containing the entire [`UmbraString`].
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        // Safety:
+        // + We always construct the string using valid UTF-8 bytes.
+        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
 
     #[inline]
     fn suffix(&self) -> &[u8] {
@@ -463,7 +467,7 @@ where
             unsafe {
                 self.trailing
                     .ptr
-                    .as_bytes_unchecked(len)
+                    .thin_as_bytes(len)
                     .get_unchecked(PREFIX_LENGTH..)
             }
         }
@@ -471,7 +475,7 @@ where
 
     fn cmp<BB>(lhs: &Self, rhs: &UmbraString<BB>) -> cmp::Ordering
     where
-        BB: DynBytes,
+        BB: ThinDrop + ThinAsBytes,
     {
         let prefix_ordering = Ord::cmp(&lhs.prefix, &rhs.prefix);
         if prefix_ordering != cmp::Ordering::Equal {

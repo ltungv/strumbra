@@ -5,34 +5,47 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-/// Trait for types that represent a heap-allocated byte array.
+/// Trait for thin pointer to a slice that can be dropped using a user-provided length.
 ///
 /// # Safety
 ///
-/// + [`DynBytes`] are thin pointers to a heap-allocated byte array. Because types don't have the
-///   information about the length of the array, the user is responsible for providing a valid length
-///   when they access it.
-pub unsafe trait DynBytes {
-    /// Deallocate a byte container.
+/// Types that implement this trait must correctly use the user-provided length.
+pub unsafe trait ThinDrop {
+    /// Deallocate a byte container through a thin pointer.
     ///
     /// # Safety
     ///
     /// + The caller must ensure that `len` equals the number of allocated bytes.
-    unsafe fn dealloc_unchecked(&self, len: usize);
+    unsafe fn thin_drop(&self, len: usize);
+}
 
-    /// Clone a byte container.
+/// Trait for thin pointer to a slice that can be cloned using a user-provided length.
+///
+/// # Safety
+///
+/// Types that implement this trait must correctly use the user-provided length.
+pub unsafe trait ThinClone {
+    /// Clone a byte container through a thin pointer.
     ///
     /// # Safety
     ///
     /// + The caller must ensure that `len` equals the number of allocated bytes.
-    unsafe fn clone_unchecked(&self, len: usize) -> Self;
+    unsafe fn thin_clone(&self, len: usize) -> Self;
+}
 
-    /// Get a slice to the underlying bytes.
+/// Trait for thin pointer to a slice that can be turned into a reference using a user-provided
+/// length.
+///
+/// # Safety
+///
+/// Types that implement this trait must correctly use the user-provided length.
+pub unsafe trait ThinAsBytes {
+    /// Get a slice to the underlying bytes through a thin pointer.
     ///
     /// # Safety
     ///
     /// + The caller must ensure that `len` equals the number of allocated bytes.
-    unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8];
+    unsafe fn thin_as_bytes(&self, len: usize) -> &[u8];
 }
 
 #[repr(C)]
@@ -97,8 +110,8 @@ impl From<Vec<u8>> for UniqueDynBytes {
     }
 }
 
-unsafe impl DynBytes for UniqueDynBytes {
-    unsafe fn dealloc_unchecked(&self, len: usize) {
+unsafe impl ThinDrop for UniqueDynBytes {
+    unsafe fn thin_drop(&self, len: usize) {
         if len > 0 {
             // Safety:
             // + We only allocate using the default global allocator.
@@ -108,8 +121,10 @@ unsafe impl DynBytes for UniqueDynBytes {
             }
         }
     }
+}
 
-    unsafe fn clone_unchecked(&self, len: usize) -> Self {
+unsafe impl ThinClone for UniqueDynBytes {
+    unsafe fn thin_clone(&self, len: usize) -> Self {
         let ptr = if len == 0 {
             NonNull::dangling()
         } else {
@@ -136,9 +151,11 @@ unsafe impl DynBytes for UniqueDynBytes {
             phantom: PhantomData,
         }
     }
+}
 
+unsafe impl ThinAsBytes for UniqueDynBytes {
     #[inline]
-    unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8] {
+    unsafe fn thin_as_bytes(&self, len: usize) -> &[u8] {
         if len == 0 {
             Default::default()
         } else {
@@ -226,8 +243,8 @@ impl From<Vec<u8>> for SharedDynBytes {
     }
 }
 
-unsafe impl DynBytes for SharedDynBytes {
-    unsafe fn dealloc_unchecked(&self, len: usize) {
+unsafe impl ThinDrop for SharedDynBytes {
+    unsafe fn thin_drop(&self, len: usize) {
         if len > 0 {
             // Safety:
             // + We have access to `&self`, thus the pointer has not been deallocated.
@@ -245,8 +262,10 @@ unsafe impl DynBytes for SharedDynBytes {
             }
         }
     }
+}
 
-    unsafe fn clone_unchecked(&self, len: usize) -> Self {
+unsafe impl ThinClone for SharedDynBytes {
+    unsafe fn thin_clone(&self, len: usize) -> Self {
         let ptr = if len == 0 {
             NonNull::dangling()
         } else {
@@ -264,9 +283,11 @@ unsafe impl DynBytes for SharedDynBytes {
             phantom: PhantomData,
         }
     }
+}
 
+unsafe impl ThinAsBytes for SharedDynBytes {
     #[inline]
-    unsafe fn as_bytes_unchecked(&self, len: usize) -> &[u8] {
+    unsafe fn thin_as_bytes(&self, len: usize) -> &[u8] {
         if len == 0 {
             Default::default()
         } else {
@@ -296,15 +317,15 @@ fn array_layout<T>(len: usize) -> Layout {
 
 #[cfg(test)]
 mod tests {
-    use super::{DynBytes, SharedDynBytes, UniqueDynBytes};
+    use super::{SharedDynBytes, ThinAsBytes, ThinClone, ThinDrop, UniqueDynBytes};
 
     #[test]
     fn test_create_unique_dyn_bytes_from_empty_slice() {
         let data = [];
         let unique = UniqueDynBytes::from(&data[..]);
         unsafe {
-            assert_eq!(&data, unique.as_bytes_unchecked(data.len()));
-            unique.dealloc_unchecked(data.len());
+            assert_eq!(&data, unique.thin_as_bytes(data.len()));
+            unique.thin_drop(data.len());
         }
     }
 
@@ -313,8 +334,8 @@ mod tests {
         let data = b"hello world";
         let unique = UniqueDynBytes::from(&data[..]);
         unsafe {
-            assert_eq!(&data[..], unique.as_bytes_unchecked(data.len()));
-            unique.dealloc_unchecked(data.len());
+            assert_eq!(&data[..], unique.thin_as_bytes(data.len()));
+            unique.thin_drop(data.len());
         }
     }
 
@@ -323,8 +344,8 @@ mod tests {
         let data = Vec::new();
         let unique = UniqueDynBytes::from(data.clone());
         unsafe {
-            assert_eq!(&data, unique.as_bytes_unchecked(data.len()));
-            unique.dealloc_unchecked(data.len());
+            assert_eq!(&data, unique.thin_as_bytes(data.len()));
+            unique.thin_drop(data.len());
         }
     }
 
@@ -333,8 +354,8 @@ mod tests {
         let data = Vec::from(b"hello world");
         let unique = UniqueDynBytes::from(data.clone());
         unsafe {
-            assert_eq!(&data, unique.as_bytes_unchecked(data.len()));
-            unique.dealloc_unchecked(data.len());
+            assert_eq!(&data, unique.thin_as_bytes(data.len()));
+            unique.thin_drop(data.len());
         }
     }
 
@@ -343,8 +364,8 @@ mod tests {
         let data = [];
         let shared = SharedDynBytes::from(&data[..]);
         unsafe {
-            assert_eq!(&data, shared.as_bytes_unchecked(data.len()));
-            shared.dealloc_unchecked(data.len());
+            assert_eq!(&data, shared.thin_as_bytes(data.len()));
+            shared.thin_drop(data.len());
         }
     }
 
@@ -353,8 +374,8 @@ mod tests {
         let data = b"hello world";
         let shared = SharedDynBytes::from(&data[..]);
         unsafe {
-            assert_eq!(&data[..], shared.as_bytes_unchecked(data.len()));
-            shared.dealloc_unchecked(data.len());
+            assert_eq!(&data[..], shared.thin_as_bytes(data.len()));
+            shared.thin_drop(data.len());
         }
     }
 
@@ -363,8 +384,8 @@ mod tests {
         let data = Vec::new();
         let shared = SharedDynBytes::from(data.clone());
         unsafe {
-            assert_eq!(&data, shared.as_bytes_unchecked(data.len()));
-            shared.dealloc_unchecked(data.len());
+            assert_eq!(&data, shared.thin_as_bytes(data.len()));
+            shared.thin_drop(data.len());
         }
     }
 
@@ -373,8 +394,8 @@ mod tests {
         let data = Vec::from(b"hello world");
         let shared = SharedDynBytes::from(data.clone());
         unsafe {
-            assert_eq!(&data, shared.as_bytes_unchecked(data.len()));
-            shared.dealloc_unchecked(data.len());
+            assert_eq!(&data, shared.thin_as_bytes(data.len()));
+            shared.thin_drop(data.len());
         }
     }
 
@@ -382,12 +403,12 @@ mod tests {
     fn test_clone_unique_dyn_bytes_empty() {
         let data = [];
         let unique0 = UniqueDynBytes::from(&data[..]);
-        let unique1 = unsafe { unique0.clone_unchecked(data.len()) };
+        let unique1 = unsafe { unique0.thin_clone(data.len()) };
         unsafe {
-            assert_eq!(&data, unique0.as_bytes_unchecked(data.len()));
-            assert_eq!(&data, unique1.as_bytes_unchecked(data.len()));
-            unique0.dealloc_unchecked(data.len());
-            unique1.dealloc_unchecked(data.len());
+            assert_eq!(&data, unique0.thin_as_bytes(data.len()));
+            assert_eq!(&data, unique1.thin_as_bytes(data.len()));
+            unique0.thin_drop(data.len());
+            unique1.thin_drop(data.len());
         }
     }
 
@@ -395,12 +416,12 @@ mod tests {
     fn test_clone_unique_dyn_bytes_non_empty() {
         let data = b"hello world";
         let unique0 = UniqueDynBytes::from(&data[..]);
-        let unique1 = unsafe { unique0.clone_unchecked(data.len()) };
+        let unique1 = unsafe { unique0.thin_clone(data.len()) };
         unsafe {
-            assert_eq!(&data[..], unique0.as_bytes_unchecked(data.len()));
-            assert_eq!(&data[..], unique1.as_bytes_unchecked(data.len()));
-            unique0.dealloc_unchecked(data.len());
-            unique1.dealloc_unchecked(data.len());
+            assert_eq!(&data[..], unique0.thin_as_bytes(data.len()));
+            assert_eq!(&data[..], unique1.thin_as_bytes(data.len()));
+            unique0.thin_drop(data.len());
+            unique1.thin_drop(data.len());
         }
     }
 
@@ -408,12 +429,12 @@ mod tests {
     fn test_clone_shared_dyn_bytes_empty() {
         let data = [];
         let shared0 = SharedDynBytes::from(&data[..]);
-        let shared1 = unsafe { shared0.clone_unchecked(data.len()) };
+        let shared1 = unsafe { shared0.thin_clone(data.len()) };
         unsafe {
-            assert_eq!(&data, shared0.as_bytes_unchecked(data.len()));
-            assert_eq!(&data, shared1.as_bytes_unchecked(data.len()));
-            shared0.dealloc_unchecked(data.len());
-            shared1.dealloc_unchecked(data.len());
+            assert_eq!(&data, shared0.thin_as_bytes(data.len()));
+            assert_eq!(&data, shared1.thin_as_bytes(data.len()));
+            shared0.thin_drop(data.len());
+            shared1.thin_drop(data.len());
         }
     }
 
@@ -421,12 +442,12 @@ mod tests {
     fn test_clone_shared_dyn_bytes_non_empty() {
         let data = b"hello world";
         let shared0 = SharedDynBytes::from(&data[..]);
-        let shared1 = unsafe { shared0.clone_unchecked(data.len()) };
+        let shared1 = unsafe { shared0.thin_clone(data.len()) };
         unsafe {
-            assert_eq!(&data[..], shared0.as_bytes_unchecked(data.len()));
-            assert_eq!(&data[..], shared1.as_bytes_unchecked(data.len()));
-            shared0.dealloc_unchecked(data.len());
-            shared1.dealloc_unchecked(data.len());
+            assert_eq!(&data[..], shared0.thin_as_bytes(data.len()));
+            assert_eq!(&data[..], shared1.thin_as_bytes(data.len()));
+            shared0.thin_drop(data.len());
+            shared1.thin_drop(data.len());
         }
     }
 }
