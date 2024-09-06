@@ -17,10 +17,10 @@ pub unsafe trait ThinDrop {
     ///
     /// + The caller must ensure that `len` equals the number of allocated bytes.
     /// + The caller must ensure that the object will never be accessed once this method is called.
-    ///   Accessing the object after calling this method may result in a use-after-free.
+    ///   Accessing the object after calling this method may result in an undefined behavior.
     /// + The caller must ensure the this method is called exactly once through out the lifetime of
     ///   the program. Not calling this method will result in a memory leak. Calling this method
-    ///   more than once may result in a double-free.
+    ///   more than once may result in an undefined behavior.
     unsafe fn thin_drop(&self, len: usize);
 }
 
