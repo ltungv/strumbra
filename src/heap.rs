@@ -324,7 +324,7 @@ mod tests {
     use super::{SharedDynBytes, ThinAsBytes, ThinClone, ThinDrop, UniqueDynBytes};
 
     #[test]
-    fn test_create_unique_dyn_bytes_from_empty_slice() {
+    fn create_unique_dyn_bytes_from_empty_slice() {
         let data = [];
         let unique = UniqueDynBytes::from(&data[..]);
         unsafe {
@@ -334,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_unique_dyn_bytes_from_non_empty_slice() {
+    fn create_unique_dyn_bytes_from_non_empty_slice() {
         let data = b"hello world";
         let unique = UniqueDynBytes::from(&data[..]);
         unsafe {
@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_unique_dyn_bytes_from_empty_vec() {
+    fn create_unique_dyn_bytes_from_empty_vec() {
         let data = Vec::new();
         let unique = UniqueDynBytes::from(data.clone());
         unsafe {
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_unique_dyn_bytes_from_non_empty_vec() {
+    fn create_unique_dyn_bytes_from_non_empty_vec() {
         let data = Vec::from(b"hello world");
         let unique = UniqueDynBytes::from(data.clone());
         unsafe {
@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shared_dyn_bytes_from_empty_slice() {
+    fn create_shared_dyn_bytes_from_empty_slice() {
         let data = [];
         let shared = SharedDynBytes::from(&data[..]);
         unsafe {
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shared_dyn_bytes_from_non_empty_slice() {
+    fn create_shared_dyn_bytes_from_non_empty_slice() {
         let data = b"hello world";
         let shared = SharedDynBytes::from(&data[..]);
         unsafe {
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shared_dyn_bytes_from_empty_vec() {
+    fn create_shared_dyn_bytes_from_empty_vec() {
         let data = Vec::new();
         let shared = SharedDynBytes::from(data.clone());
         unsafe {
@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shared_dyn_bytes_from_non_empty_vec() {
+    fn create_shared_dyn_bytes_from_non_empty_vec() {
         let data = Vec::from(b"hello world");
         let shared = SharedDynBytes::from(data.clone());
         unsafe {
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_unique_dyn_bytes_empty() {
+    fn clone_unique_dyn_bytes_empty() {
         let data = [];
         let unique0 = UniqueDynBytes::from(&data[..]);
         let unique1 = unsafe { unique0.thin_clone(data.len()) };
@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_unique_dyn_bytes_non_empty() {
+    fn clone_unique_dyn_bytes_non_empty() {
         let data = b"hello world";
         let unique0 = UniqueDynBytes::from(&data[..]);
         let unique1 = unsafe { unique0.thin_clone(data.len()) };
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_shared_dyn_bytes_empty() {
+    fn clone_shared_dyn_bytes_empty() {
         let data = [];
         let shared0 = SharedDynBytes::from(&data[..]);
         let shared1 = unsafe { shared0.thin_clone(data.len()) };
@@ -443,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_shared_dyn_bytes_non_empty() {
+    fn clone_shared_dyn_bytes_non_empty() {
         let data = b"hello world";
         let shared0 = SharedDynBytes::from(&data[..]);
         let shared1 = unsafe { shared0.thin_clone(data.len()) };
