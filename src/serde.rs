@@ -4,7 +4,7 @@ use std::{fmt, marker::PhantomData};
 
 use crate::{
     heap::{ThinAsBytes, ThinDrop},
-    SharedString, UmbraString, UniqueString,
+    UmbraString,
 };
 
 struct Visitor<B>(PhantomData<B>);
@@ -19,13 +19,6 @@ where
         formatter.write_str("a string")
     }
 
-    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        UmbraString::try_from(s).map_err(serde::de::Error::custom)
-    }
-
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
@@ -33,7 +26,7 @@ where
         UmbraString::try_from(s).map_err(serde::de::Error::custom)
     }
 
-    fn visit_borrowed_str<E>(self, s: &'v str) -> Result<Self::Value, E>
+    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -49,25 +42,19 @@ where
     where
         S: serde::Serializer,
     {
-        self.as_str().serialize(serializer)
+        serializer.serialize_str(self)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for UniqueString {
+impl<'de, B> serde::Deserialize<'de> for UmbraString<B>
+where
+    B: ThinDrop + From<Vec<u8>> + for<'b> From<&'b [u8]>,
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_string(Visitor(PhantomData))
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for SharedString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(Visitor(PhantomData))
     }
 }
 
