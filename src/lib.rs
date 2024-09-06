@@ -50,13 +50,13 @@ union Trailing<B> {
 ///
 /// + The inlined content is always copied.
 /// + The heap-allocated content is `Send`.
-unsafe impl<B> Send for Trailing<B> where B: Send {}
+unsafe impl<B> Send for Trailing<B> where B: Send + Sync {}
 
 /// # Safety:
 ///
 /// + The inlined content is immutable.
 /// + The heap-allocated content is `Sync`.
-unsafe impl<B> Sync for Trailing<B> where B: Sync {}
+unsafe impl<B> Sync for Trailing<B> where B: Send + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
@@ -79,13 +79,13 @@ pub struct UmbraString<B: ThinDrop> {
 ///
 /// + `len` is always copied.
 /// + The heap-allocated bytes are `Send`.
-unsafe impl<B> Send for UmbraString<B> where B: ThinDrop + Send {}
+unsafe impl<B> Send for UmbraString<B> where B: ThinDrop + Send + Sync {}
 
 /// # Safety:
 ///
 /// + `len` is immutable.
 /// + The heap-allocated bytes are `Sync`.
-unsafe impl<B> Sync for UmbraString<B> where B: ThinDrop + Sync {}
+unsafe impl<B> Sync for UmbraString<B> where B: ThinDrop + Send + Sync {}
 
 impl<B> Drop for UmbraString<B>
 where
