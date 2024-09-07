@@ -41,6 +41,7 @@ impl std::fmt::Display for Error {
     }
 }
 
+#[repr(C)]
 union Trailing<B> {
     buf: [u8; SUFFIX_LENGTH],
     ptr: ManuallyDrop<B>,
