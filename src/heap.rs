@@ -56,7 +56,7 @@ pub unsafe trait ThinAsBytes {
 #[allow(missing_debug_implementations)]
 pub struct UniqueDynBytes {
     ptr: NonNull<u8>,
-    phantom: PhantomData<u8>,
+    phantom: PhantomData<[u8]>,
 }
 
 /// # Safety:
