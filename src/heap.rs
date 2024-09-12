@@ -227,9 +227,15 @@ impl From<&[u8]> for SharedDynBytes {
             // allocated bytes.
             // + We are copying `len` bytes into a buffer of the same size.
             unsafe {
-                let inner = &mut (*fat_ptr.as_ptr());
-                std::ptr::write(&mut inner.count, AtomicUsize::new(1));
-                std::ptr::copy_nonoverlapping(bytes.as_ptr(), inner.data.as_mut_ptr(), bytes.len());
+                std::ptr::write(
+                    std::ptr::addr_of_mut!((*fat_ptr.as_ptr()).count),
+                    AtomicUsize::new(1),
+                );
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    std::ptr::addr_of_mut!((*fat_ptr.as_ptr()).data).cast(),
+                    bytes.len(),
+                );
             }
             fat_ptr.cast()
         };
