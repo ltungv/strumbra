@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use quickcheck_macros::quickcheck;
 use serde::{Deserialize, Serialize};
-use strumbra::{SharedString, UniqueString};
+use strumbra::{ArcString, BoxString, RcString};
 
 #[derive(Serialize, Deserialize)]
 struct Test<T: Eq + Hash> {
@@ -18,17 +18,26 @@ struct Test<T: Eq + Hash> {
 fn serde(raw: String, vec: Vec<String>, map: HashMap<String, String>) {
     let wanted = Test { raw, vec, map };
     let json = serde_json::to_string(&wanted).unwrap();
-    let unique = serde_json::from_str::<Test<UniqueString>>(&json).unwrap();
-    let shared = serde_json::from_str::<Test<SharedString>>(&json).unwrap();
-    assert_eq!(wanted.raw, unique.raw);
-    assert_eq!(wanted.raw, shared.raw);
-    assert_eq!(wanted.vec, unique.vec);
-    assert_eq!(wanted.vec, shared.vec);
+
+    let boxed = serde_json::from_str::<Test<BoxString>>(&json).unwrap();
+    let arc = serde_json::from_str::<Test<ArcString>>(&json).unwrap();
+    let rc = serde_json::from_str::<Test<RcString>>(&json).unwrap();
+
+    assert_eq!(wanted.raw, boxed.raw);
+    assert_eq!(wanted.raw, arc.raw);
+    assert_eq!(wanted.raw, rc.raw);
+
+    assert_eq!(wanted.vec, boxed.vec);
+    assert_eq!(wanted.vec, arc.vec);
+    assert_eq!(wanted.vec, rc.vec);
 
     for (k, v) in wanted.map {
-        let unique_v = unique.map.get(k.as_str()).expect("A existing value");
-        let shared_v = shared.map.get(k.as_str()).expect("A existing value");
-        assert_eq!(&v, unique_v);
-        assert_eq!(&v, shared_v);
+        let boxed_v = boxed.map.get(k.as_str()).expect("A existing value");
+        let arc_v = arc.map.get(k.as_str()).expect("A existing value");
+        let rc_v = rc.map.get(k.as_str()).expect("A existing value");
+
+        assert_eq!(&v, boxed_v);
+        assert_eq!(&v, arc_v);
+        assert_eq!(&v, rc_v);
     }
 }

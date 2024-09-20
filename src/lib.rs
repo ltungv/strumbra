@@ -18,7 +18,7 @@ mod heap;
 
 use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
-use heap::{SharedDynBytes, ThinAsBytes, ThinClone, ThinDrop, UniqueDynBytes};
+use heap::{ArcDynBytes, BoxDynBytes, RcDynBytes, ThinAsBytes, ThinClone, ThinDrop};
 
 const INLINED_LENGTH: usize = 12;
 const PREFIX_LENGTH: usize = 4;
@@ -61,11 +61,25 @@ unsafe impl<B> Sync for Trailing<B> where B: Send + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
-pub type UniqueString = UmbraString<UniqueDynBytes>;
+pub type BoxString = UmbraString<BoxDynBytes>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using an atomic counter.
-pub type SharedString = UmbraString<SharedDynBytes>;
+pub type ArcString = UmbraString<ArcDynBytes>;
+
+/// An Umbra-style string that shares its underlying bytes and keeps track of the number of
+/// references using a counter.
+pub type RcString = UmbraString<RcDynBytes>;
+
+/// An Umbra-style string that owns its underlying bytes and does not share the bytes among
+/// different instances.
+#[deprecated(since = "0.5.0", note = "please use `BoxString` instead")]
+pub type UniqueString = BoxString;
+
+/// An Umbra-style string that shares its underlying bytes and keeps track of the number of
+/// references using an atomic counter.
+#[deprecated(since = "0.5.0", note = "please use `ArcString` instead")]
+pub type SharedString = ArcString;
 
 /// A string data structure optimized for analytical processing workload. Unlike [`String`], which
 /// uses 24 bytes on the stack, this data structure uses only 16 bytes and is immutable.
