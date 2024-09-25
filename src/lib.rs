@@ -20,8 +20,6 @@ use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
 use heap::{ArcDynBytes, BoxDynBytes, RcDynBytes, ThinAsBytes, ThinClone, ThinDrop};
 
-const INLINED_LENGTH: usize = 12;
-const PREFIX_LENGTH: usize = 4;
 const SUFFIX_LENGTH: usize = 8;
 
 /// A type for all possible errors that can occur when using [`UmbraString`].
@@ -61,30 +59,28 @@ unsafe impl<B> Sync for Trailing<B> where B: Send + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
-pub type BoxString = UmbraString<BoxDynBytes>;
+pub type BoxString<const INLINED_LENGTH: usize> = UmbraString<BoxDynBytes, INLINED_LENGTH>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using an atomic counter.
-pub type ArcString = UmbraString<ArcDynBytes>;
+pub type ArcString<const INLINED_LENGTH: usize> = UmbraString<ArcDynBytes, INLINED_LENGTH>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using a counter.
-pub type RcString = UmbraString<RcDynBytes>;
+pub type RcString<const INLINED_LENGTH: usize> = UmbraString<RcDynBytes, INLINED_LENGTH>;
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
-#[deprecated(since = "0.5.0", note = "please use `BoxString` instead")]
-pub type UniqueString = BoxString;
+pub type UniqueString = BoxString<4>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using an atomic counter.
-#[deprecated(since = "0.5.0", note = "please use `ArcString` instead")]
-pub type SharedString = ArcString;
+pub type SharedString = ArcString<4>;
 
 /// A string data structure optimized for analytical processing workload. Unlike [`String`], which
 /// uses 24 bytes on the stack, this data structure uses only 16 bytes and is immutable.
 #[repr(C)]
-pub struct UmbraString<B: ThinDrop> {
+pub struct UmbraString<B: ThinDrop, const PREFIX_LENGTH: usize> {
     len: u32,
     prefix: [u8; PREFIX_LENGTH],
     trailing: Trailing<B>,
@@ -94,20 +90,26 @@ pub struct UmbraString<B: ThinDrop> {
 ///
 /// + `len` is always copied.
 /// + The heap-allocated bytes are `Send`.
-unsafe impl<B> Send for UmbraString<B> where B: ThinDrop + Send + Sync {}
+unsafe impl<B, const PREFIX_LENGTH: usize> Send for UmbraString<B, PREFIX_LENGTH> where
+    B: ThinDrop + Send + Sync
+{
+}
 
 /// # Safety:
 ///
 /// + `len` is immutable.
 /// + The heap-allocated bytes are `Sync`.
-unsafe impl<B> Sync for UmbraString<B> where B: ThinDrop + Send + Sync {}
+unsafe impl<B, const PREFIX_LENGTH: usize> Sync for UmbraString<B, PREFIX_LENGTH> where
+    B: ThinDrop + Send + Sync
+{
+}
 
-impl<B> Drop for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> Drop for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop,
 {
     fn drop(&mut self) {
-        if self.len() > INLINED_LENGTH {
+        if self.len() > Self::INLINED_LENGTH {
             // Safety:
             // + We know that the string is heap-allocated because len > INLINED_LENGTH.
             // + We never modify `len`, thus it always equals to the number of allocated bytes.
@@ -118,12 +120,12 @@ where
     }
 }
 
-impl<B> Clone for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> Clone for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinClone,
 {
     fn clone(&self) -> Self {
-        let trailing = if self.len() <= INLINED_LENGTH {
+        let trailing = if self.len() <= Self::INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             unsafe {
@@ -148,7 +150,7 @@ where
     }
 }
 
-impl<B> TryFrom<&str> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> TryFrom<&str> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + for<'a> From<&'a [u8]>,
 {
@@ -160,7 +162,7 @@ where
     }
 }
 
-impl<B> TryFrom<&String> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> TryFrom<&String> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + for<'a> From<&'a [u8]>,
 {
@@ -172,7 +174,7 @@ where
     }
 }
 
-impl<B> TryFrom<String> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> TryFrom<String> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + From<Vec<u8>>,
 {
@@ -184,7 +186,7 @@ where
     }
 }
 
-impl<B> std::ops::Deref for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> std::ops::Deref for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -196,7 +198,7 @@ where
     }
 }
 
-impl<B> AsRef<str> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> AsRef<str> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -206,7 +208,7 @@ where
     }
 }
 
-impl<B> Borrow<str> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> Borrow<str> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -216,7 +218,7 @@ where
     }
 }
 
-impl<B> std::hash::Hash for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> std::hash::Hash for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -229,13 +231,17 @@ where
     }
 }
 
-impl<B> Eq for UmbraString<B> where B: ThinDrop + ThinAsBytes {}
-impl<B1, B2> PartialEq<UmbraString<B2>> for UmbraString<B1>
+impl<B, const PREFIX_LENGTH: usize> Eq for UmbraString<B, PREFIX_LENGTH> where
+    B: ThinDrop + ThinAsBytes
+{
+}
+impl<B1, B2, const PREFIX_LENGTH: usize> PartialEq<UmbraString<B2, PREFIX_LENGTH>>
+    for UmbraString<B1, PREFIX_LENGTH>
 where
     B1: ThinDrop + ThinAsBytes,
     B2: ThinDrop + ThinAsBytes,
 {
-    fn eq(&self, other: &UmbraString<B2>) -> bool {
+    fn eq(&self, other: &UmbraString<B2, PREFIX_LENGTH>) -> bool {
         let lhs_first_qword = std::ptr::from_ref(self).cast::<u64>();
         let rhs_first_qword = std::ptr::from_ref(other).cast::<u64>();
         // Safety:
@@ -247,7 +253,7 @@ where
         if unsafe { *lhs_first_qword != *rhs_first_qword } {
             return false;
         }
-        if self.len() <= INLINED_LENGTH {
+        if self.len() <= Self::INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             return unsafe { self.trailing.buf == other.trailing.buf };
@@ -256,7 +262,7 @@ where
     }
 }
 
-impl<B> PartialEq<str> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> PartialEq<str> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -266,17 +272,17 @@ where
     }
 }
 
-impl<B> PartialEq<UmbraString<B>> for str
+impl<B, const PREFIX_LENGTH: usize> PartialEq<UmbraString<B, PREFIX_LENGTH>> for str
 where
     B: ThinDrop + ThinAsBytes,
 {
     #[inline]
-    fn eq(&self, other: &UmbraString<B>) -> bool {
+    fn eq(&self, other: &UmbraString<B, PREFIX_LENGTH>) -> bool {
         self.as_bytes() == other.as_bytes()
     }
 }
 
-impl<B> PartialEq<String> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> PartialEq<String> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -286,17 +292,17 @@ where
     }
 }
 
-impl<B> PartialEq<UmbraString<B>> for String
+impl<B, const PREFIX_LENGTH: usize> PartialEq<UmbraString<B, PREFIX_LENGTH>> for String
 where
     B: ThinDrop + ThinAsBytes,
 {
     #[inline]
-    fn eq(&self, other: &UmbraString<B>) -> bool {
+    fn eq(&self, other: &UmbraString<B, PREFIX_LENGTH>) -> bool {
         self.as_bytes() == other.as_bytes()
     }
 }
 
-impl<B> Ord for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> Ord for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -306,18 +312,19 @@ where
     }
 }
 
-impl<B1, B2> PartialOrd<UmbraString<B2>> for UmbraString<B1>
+impl<B1, B2, const PREFIX_LENGTH: usize> PartialOrd<UmbraString<B2, PREFIX_LENGTH>>
+    for UmbraString<B1, PREFIX_LENGTH>
 where
     B1: ThinDrop + ThinAsBytes,
     B2: ThinDrop + ThinAsBytes,
 {
     #[inline]
-    fn partial_cmp(&self, other: &UmbraString<B2>) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &UmbraString<B2, PREFIX_LENGTH>) -> Option<cmp::Ordering> {
         Some(Self::cmp(self, other))
     }
 }
 
-impl<B> PartialOrd<str> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> PartialOrd<str> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -327,17 +334,17 @@ where
     }
 }
 
-impl<B> PartialOrd<UmbraString<B>> for str
+impl<B, const PREFIX_LENGTH: usize> PartialOrd<UmbraString<B, PREFIX_LENGTH>> for str
 where
     B: ThinDrop + ThinAsBytes,
 {
     #[inline]
-    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &UmbraString<B, PREFIX_LENGTH>) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 
-impl<B> PartialOrd<String> for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> PartialOrd<String> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -347,17 +354,17 @@ where
     }
 }
 
-impl<B> PartialOrd<UmbraString<B>> for String
+impl<B, const PREFIX_LENGTH: usize> PartialOrd<UmbraString<B, PREFIX_LENGTH>> for String
 where
     B: ThinDrop + ThinAsBytes,
 {
     #[inline]
-    fn partial_cmp(&self, other: &UmbraString<B>) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &UmbraString<B, PREFIX_LENGTH>) -> Option<cmp::Ordering> {
         PartialOrd::partial_cmp(self.as_bytes(), other.as_bytes())
     }
 }
 
-impl<B> std::fmt::Display for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> std::fmt::Display for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -367,7 +374,7 @@ where
     }
 }
 
-impl<B> std::fmt::Debug for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> std::fmt::Debug for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -377,10 +384,12 @@ where
     }
 }
 
-impl<B> UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop,
 {
+    const INLINED_LENGTH: usize = PREFIX_LENGTH + SUFFIX_LENGTH;
+
     /// Returns the length of `self`.
     ///
     /// This length is in bytes, not [`char`]s or graphemes. In other words,
@@ -407,7 +416,7 @@ where
             return Err(Error::TooLong);
         }
         let mut prefix = [0u8; PREFIX_LENGTH];
-        let trailing = if len <= INLINED_LENGTH {
+        let trailing = if len <= Self::INLINED_LENGTH {
             let mut buf = [0u8; SUFFIX_LENGTH];
             if len <= PREFIX_LENGTH {
                 prefix[..len].copy_from_slice(&bytes[..len]);
@@ -430,14 +439,15 @@ where
         })
     }
 }
-impl<B> UmbraString<B>
+
+impl<B, const PREFIX_LENGTH: usize> UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
     /// Converts `self` to a byte slice.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        if self.len() <= INLINED_LENGTH {
+        if self.len() <= Self::INLINED_LENGTH {
             // Note: If we cast from a reference to a pointer, we can only access memory that was
             // within the bounds of the reference. This is done to satisfied miri when we create a
             // slice starting from the pointer of self.prefix to access data beyond it.
@@ -467,7 +477,7 @@ where
 
     #[inline]
     fn suffix(&self) -> &[u8] {
-        if self.len() <= INLINED_LENGTH {
+        if self.len() <= Self::INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             let suffix_len = self.len().saturating_sub(PREFIX_LENGTH);
@@ -486,7 +496,7 @@ where
         }
     }
 
-    fn cmp<BB>(lhs: &Self, rhs: &UmbraString<BB>) -> cmp::Ordering
+    fn cmp<BB>(lhs: &Self, rhs: &UmbraString<BB, PREFIX_LENGTH>) -> cmp::Ordering
     where
         BB: ThinDrop + ThinAsBytes,
     {
@@ -497,7 +507,7 @@ where
         if lhs.len() <= PREFIX_LENGTH && rhs.len() <= PREFIX_LENGTH {
             return Ord::cmp(&lhs.len, &rhs.len);
         }
-        if lhs.len() <= INLINED_LENGTH && rhs.len() <= INLINED_LENGTH {
+        if lhs.len() <= Self::INLINED_LENGTH && rhs.len() <= Self::INLINED_LENGTH {
             // Safety:
             // + We know that the string is inlined because len <= INLINED_LENGTH.
             let suffix_ordering = unsafe { Ord::cmp(&lhs.trailing.buf, &rhs.trailing.buf) };

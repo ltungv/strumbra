@@ -7,13 +7,13 @@ use crate::{
     UmbraString,
 };
 
-struct Visitor<B>(PhantomData<B>);
+struct Visitor<B, const PREFIX_LENGTH: usize>(PhantomData<B>);
 
-impl<'v, B> serde::de::Visitor<'v> for Visitor<B>
+impl<'v, B, const PREFIX_LENGTH: usize> serde::de::Visitor<'v> for Visitor<B, PREFIX_LENGTH>
 where
     B: ThinDrop + From<Vec<u8>> + for<'b> From<&'b [u8]>,
 {
-    type Value = UmbraString<B>;
+    type Value = UmbraString<B, PREFIX_LENGTH>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a string")
@@ -34,7 +34,7 @@ where
     }
 }
 
-impl<B> serde::Serialize for UmbraString<B>
+impl<B, const PREFIX_LENGTH: usize> serde::Serialize for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + ThinAsBytes,
 {
@@ -46,7 +46,7 @@ where
     }
 }
 
-impl<'de, B> serde::Deserialize<'de> for UmbraString<B>
+impl<'de, B, const PREFIX_LENGTH: usize> serde::Deserialize<'de> for UmbraString<B, PREFIX_LENGTH>
 where
     B: ThinDrop + From<Vec<u8>> + for<'b> From<&'b [u8]>,
 {

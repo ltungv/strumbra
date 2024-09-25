@@ -4,7 +4,10 @@ use std::{collections::HashMap, hash::Hash};
 
 use quickcheck_macros::quickcheck;
 use serde::{Deserialize, Serialize};
-use strumbra::{ArcString, BoxString, RcString};
+
+type BoxString = strumbra::BoxString<4>;
+type ArcString = strumbra::ArcString<4>;
+type RcString = strumbra::RcString<4>;
 
 #[derive(Serialize, Deserialize)]
 struct Test<T: Eq + Hash> {

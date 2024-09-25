@@ -1,7 +1,10 @@
 use std::{cmp, thread};
 
 use quickcheck_macros::quickcheck;
-use strumbra::{ArcString, BoxString, RcString};
+
+type BoxString = strumbra::BoxString<4>;
+type ArcString = strumbra::ArcString<4>;
+type RcString = strumbra::RcString<4>;
 
 #[test]
 fn size_of() {
