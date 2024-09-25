@@ -59,15 +59,15 @@ unsafe impl<B> Sync for Trailing<B> where B: Send + Sync {}
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
-pub type BoxString<const INLINED_LENGTH: usize> = UmbraString<BoxDynBytes, INLINED_LENGTH>;
+pub type BoxString<const PREFIX_LENGTH: usize> = UmbraString<BoxDynBytes, PREFIX_LENGTH>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using an atomic counter.
-pub type ArcString<const INLINED_LENGTH: usize> = UmbraString<ArcDynBytes, INLINED_LENGTH>;
+pub type ArcString<const PREFIX_LENGTH: usize> = UmbraString<ArcDynBytes, PREFIX_LENGTH>;
 
 /// An Umbra-style string that shares its underlying bytes and keeps track of the number of
 /// references using a counter.
-pub type RcString<const INLINED_LENGTH: usize> = UmbraString<RcDynBytes, INLINED_LENGTH>;
+pub type RcString<const PREFIX_LENGTH: usize> = UmbraString<RcDynBytes, PREFIX_LENGTH>;
 
 /// An Umbra-style string that owns its underlying bytes and does not share the bytes among
 /// different instances.
