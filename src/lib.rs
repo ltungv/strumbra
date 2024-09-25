@@ -410,6 +410,7 @@ where
         S: AsRef<str>,
         A: FnOnce(S) -> B,
     {
+        const { assert!(PREFIX_LENGTH < 256, "max prefix length is too large") }
         let bytes = s.as_ref().as_bytes();
         let len = bytes.len();
         if len > u32::MAX as usize {
