@@ -2,9 +2,14 @@
 
 An implementation for the string data structure as described in [Umbra: A Disk-Based System with In-Memory Performance](https://www.cidrdb.org/cidr2020/papers/p29-neumann-cidr20.pdf).
 
-2 different types are implemented:
-+ `UniqueString` behaves like a `Box<str>`.
-+ `SharedString` behaves like a `Arc<str>`.
+3 different types are implemented:
++ `BoxString` behaves like a `Box<str>`.
++ `ArcString` behaves like a `Arc<str>`.
++ `RcString` behaves like a `Rc<str>`.
+
+Additionally, we define the following type aliases:
++ `UniqueString = BoxString<4>`
++ `SharedString = ArcString<4>`
 
 ## Properties
 
