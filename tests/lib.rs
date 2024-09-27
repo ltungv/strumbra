@@ -10,6 +10,7 @@ type RcString = strumbra::RcString<4>;
 fn size_of() {
     assert_eq!(16, std::mem::size_of::<BoxString>());
     assert_eq!(16, std::mem::size_of::<ArcString>());
+    assert_eq!(16, std::mem::size_of::<RcString>());
 }
 
 #[test]
@@ -17,6 +18,7 @@ fn construct_inlined() {
     let boxed = BoxString::try_from("hello world").expect("A valid Umbra-style string");
     let arc = ArcString::try_from("hello world").expect("A valid Umbra-style string");
     let rc = RcString::try_from("hello world").expect("A valid Umbra-style string");
+
     assert_eq!("hello world", boxed.as_ref());
     assert_eq!("hello world", arc.as_ref());
     assert_eq!("hello world", rc.as_ref());
@@ -27,6 +29,7 @@ fn construct_allocated() {
     let boxed = BoxString::try_from("Good Morning, Vietnam").expect("A valid Umbra-style string");
     let arc = ArcString::try_from("Good Morning, Vietnam").expect("A valid Umbra-style string");
     let rc = RcString::try_from("Good Morning, Vietnam").expect("A valid Umbra-style string");
+
     assert_eq!("Good Morning, Vietnam", boxed.as_ref());
     assert_eq!("Good Morning, Vietnam", arc.as_ref());
     assert_eq!("Good Morning, Vietnam", rc.as_ref());
@@ -153,6 +156,7 @@ fn format_debug(s: String) {
     let boxed = BoxString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let arc = ArcString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let rc = RcString::try_from(s.as_str()).expect("A valid Umbra-style string");
+
     assert_eq!(expected, format!("{boxed:?}"));
     assert_eq!(expected, format!("{arc:?}"));
     assert_eq!(expected, format!("{rc:?}"));
@@ -165,6 +169,7 @@ fn format_display(s: String) {
     let boxed = BoxString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let arc = ArcString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let rc = RcString::try_from(s.as_str()).expect("A valid Umbra-style string");
+
     assert_eq!(s, format!("{boxed}"));
     assert_eq!(s, format!("{arc}"));
     assert_eq!(s, format!("{rc}"));
@@ -198,6 +203,7 @@ fn eq_str(s: String) {
     let boxed = BoxString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let arc = ArcString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let rc = RcString::try_from(s.as_str()).expect("A valid Umbra-style string");
+
     assert_eq!(s.as_str(), &boxed);
     assert_eq!(s.as_str(), &arc);
     assert_eq!(s.as_str(), &rc);
@@ -210,6 +216,7 @@ fn eq_string(s: String) {
     let boxed = BoxString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let arc = ArcString::try_from(s.as_str()).expect("A valid Umbra-style string");
     let rc = RcString::try_from(s.as_str()).expect("A valid Umbra-style string");
+
     assert_eq!(s, boxed);
     assert_eq!(s, arc);
     assert_eq!(s, rc);
