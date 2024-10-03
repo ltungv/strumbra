@@ -69,12 +69,10 @@ pub type ArcString<const PREFIX_LENGTH: usize> = UmbraString<ArcDynBytes, PREFIX
 /// references using a counter.
 pub type RcString<const PREFIX_LENGTH: usize> = UmbraString<RcDynBytes, PREFIX_LENGTH>;
 
-/// An Umbra-style string that owns its underlying bytes and does not share the bytes among
-/// different instances.
+/// An alias for [`BoxString<4>`].
 pub type UniqueString = BoxString<4>;
 
-/// An Umbra-style string that shares its underlying bytes and keeps track of the number of
-/// references using an atomic counter.
+/// An alias for [`ArcString<4>`].
 pub type SharedString = ArcString<4>;
 
 /// A string data structure optimized for analytical processing workload. Unlike [`String`], which
