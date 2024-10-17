@@ -20,7 +20,7 @@ use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
 use heap::{ArcDynBytes, BoxDynBytes, RcDynBytes, ThinAsBytes, ThinClone, ThinDrop};
 
-const SUFFIX_LENGTH: usize = 8;
+const SUFFIX_LENGTH: usize = std::mem::size_of::<usize>();
 
 /// A type for all possible errors that can occur when using [`UmbraString`].
 #[derive(Debug)]
@@ -233,6 +233,7 @@ impl<B, const PREFIX_LENGTH: usize> Eq for UmbraString<B, PREFIX_LENGTH> where
     B: ThinDrop + ThinAsBytes
 {
 }
+
 impl<B1, B2, const PREFIX_LENGTH: usize> PartialEq<UmbraString<B2, PREFIX_LENGTH>>
     for UmbraString<B1, PREFIX_LENGTH>
 where
@@ -240,16 +241,27 @@ where
     B2: ThinDrop + ThinAsBytes,
 {
     fn eq(&self, other: &UmbraString<B2, PREFIX_LENGTH>) -> bool {
-        let lhs_first_qword = std::ptr::from_ref(self).cast::<u64>();
-        let rhs_first_qword = std::ptr::from_ref(other).cast::<u64>();
-        // Safety:
-        // + The pointers are obtained from the given references and guaranteed to be non-null and
-        // properly aligned.
-        // + The first QWORD contains the string length and prefix based on the layout, guaranteed
-        // by `#[repr(C)]`.
-        // + The referenced objects are immutable and are not changed concurrently.
-        if unsafe { *lhs_first_qword != *rhs_first_qword } {
-            return false;
+        // NOTES: These match branches should be eliminate by the compiler when optimization is enabled
+        match PREFIX_LENGTH {
+            // SAFETY: Calls to `first_qword` are safe because we alreay confirm that
+            // `PREFIX_LENGTH` is 4
+            4 => unsafe {
+                if self.first_qword() != other.first_qword() {
+                    return false;
+                }
+            },
+            // SAFETY: Calls to `first_oword` are safe because we alreay confirm that
+            // `PREFIX_LENGTH` is 12
+            12 => unsafe {
+                if self.first_oword() != other.first_oword() {
+                    return false;
+                }
+            },
+            _ => {
+                if self.len() != other.len() || self.prefix != other.prefix {
+                    return false;
+                }
+            }
         }
         if self.len() <= Self::INLINED_LENGTH {
             // Safety:
@@ -408,7 +420,12 @@ where
         S: AsRef<str>,
         A: FnOnce(S) -> B,
     {
-        const { assert!(PREFIX_LENGTH < 256, "max prefix length is too large") }
+        const {
+            assert!(
+                (4 + PREFIX_LENGTH) % SUFFIX_LENGTH == 0,
+                "got padding between the prefix and suffix",
+            );
+        }
         let bytes = s.as_ref().as_bytes();
         let len = bytes.len();
         if len > u32::MAX as usize {
@@ -472,6 +489,64 @@ where
         // Safety:
         // + We always construct the string using valid UTF-8 bytes.
         unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+
+    /// # Safety
+    ///
+    /// By calling this method, we must ensure that `PREFIX_LENGTH` equals to 4. Otherwise, we will
+    /// access invalid data.
+    #[inline]
+    const unsafe fn first_qword(&self) -> u64 {
+        debug_assert!(
+            PREFIX_LENGTH == 4,
+            "prefix must have a length of 4 in order to get the first qword"
+        );
+        if std::mem::align_of::<Self>() == std::mem::align_of::<u64>() {
+            // Safety:
+            // + The referenced objects are immutable and are not changed concurrently.
+            // + The pointers are obtained from the given references and guaranteed to be non-null.
+            // + The alignment was checked by the if statement.
+            // + The first QWORD contains the string length and prefix based on the layout, guaranteed
+            // by `#[repr(C)]` and the function's invariant.
+            unsafe { std::ptr::from_ref(self).cast::<u64>().read() }
+        } else {
+            // Safety:
+            // + The referenced objects are immutable and are not changed concurrently.
+            // + The pointers are obtained from the given references and guaranteed to be non-null.
+            // + The alignment is unimportant because we are using `read_unaligned`.
+            // + The first QWORD contains the string length and prefix based on the layout, guaranteed
+            // by `#[repr(C)]` and the function's invariant.
+            unsafe { std::ptr::from_ref(self).cast::<u64>().read_unaligned() }
+        }
+    }
+
+    /// # Safety
+    ///
+    /// By calling this method, we must ensure that `PREFIX_LENGTH` equals to 12. Otherwise, we
+    /// will access invalid data.
+    #[inline]
+    const unsafe fn first_oword(&self) -> u128 {
+        debug_assert!(
+            PREFIX_LENGTH == 12,
+            "prefix must have a length of 12 in order to get the first oword"
+        );
+        if std::mem::align_of::<Self>() == std::mem::align_of::<u128>() {
+            // Safety:
+            // + The referenced objects are immutable and are not changed concurrently.
+            // + The pointers are obtained from the given references and guaranteed to be non-null.
+            // + The alignment was checked by the if statement.
+            // + The first OWORD contains the string length and prefix based on the layout, guaranteed
+            // by `#[repr(C)]` and the function's invariant.
+            unsafe { std::ptr::from_ref(self).cast::<u128>().read() }
+        } else {
+            // Safety:
+            // + The referenced objects are immutable and are not changed concurrently.
+            // + The pointers are obtained from the given references and guaranteed to be non-null.
+            // + The alignment is unimportant because we are using `read_unaligned`.
+            // + The first OWORD contains the string length and prefix based on the layout, guaranteed
+            // by `#[repr(C)]` and the function's invariant.
+            unsafe { std::ptr::from_ref(self).cast::<u128>().read_unaligned() }
+        }
     }
 
     #[inline]
