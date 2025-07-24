@@ -5,8 +5,8 @@
 use std::{borrow::Borrow, cmp, mem::ManuallyDrop};
 
 use crate::{
-    heap::{ArcDynBytes, BoxDynBytes, RcDynBytes, ThinAsBytes, ThinClone, ThinDrop},
     Error, UmbraString,
+    heap::{ArcDynBytes, BoxDynBytes, RcDynBytes, ThinAsBytes, ThinClone, ThinDrop},
 };
 
 /// The number of trailing bytes in the inlined representation of an [`UmbraBytes`].

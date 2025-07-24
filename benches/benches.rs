@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rand::Rng as _;
 
 type BoxString = strumbra::BoxString<4>;
@@ -500,8 +500,8 @@ fn construct_non_empty(c: &mut Criterion) {
 }
 
 fn random_string(len: usize) -> String {
-    let bytes = rand::thread_rng()
-        .sample_iter(rand::distributions::Alphanumeric)
+    let bytes = rand::rng()
+        .sample_iter(rand::distr::Alphanumeric)
         .take(len)
         .collect::<Vec<_>>();
 

@@ -183,7 +183,7 @@ unsafe impl ThinAsBytes for BoxDynBytes {
             // initialized.
             // + We have access to `&self`, thus the bytes have not been deallocated.
             // + We return a slice having the same lifetime as `&self`.
-            std::slice::from_raw_parts(self.ptr.as_ptr(), len)
+            unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), len) }
         }
     }
 }

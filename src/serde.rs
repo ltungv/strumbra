@@ -3,8 +3,8 @@
 use std::{fmt, marker::PhantomData};
 
 use crate::{
-    heap::{ThinAsBytes, ThinDrop},
     UmbraString,
+    heap::{ThinAsBytes, ThinDrop},
 };
 
 struct Visitor<B, const PREFIX_LENGTH: usize>(PhantomData<B>);
