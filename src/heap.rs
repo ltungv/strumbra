@@ -6,50 +6,69 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-/// Trait for thin pointer to an array that can be dropped using a user-provided length.
+/// A type that owns a manually allocated array, whose length is externally known, implements this
+/// trait to provide its user a method to drop itself.
 ///
-/// # Safety
+/// # SAFETY
 ///
-/// Types that implement this trait must correctly use the user-provided length.
+/// The type that implements this trait must have ownership to the allocated array. If it has
+/// unique ownership, calling [`ThinDrop::thin_drop`] immediately deallocates the array. If it has
+/// shared ownership, calling [`ThinDrop::thin_drop`] performs the neccessary bookkeeping to remove
+/// its ownership.
+///
+/// It is the user's responsibility to provide a correct length. Thus, any implementation of this
+/// trait must respect the user-provided length when [`ThinDrop::thin_drop`] is called.
 pub unsafe trait ThinDrop {
-    /// Drop the underlying buffer through a thin pointer.
+    /// Drops the current object.
     ///
-    /// # Safety
+    /// # SAFETY
     ///
-    /// + The caller must ensure that `len` equals the number of allocated bytes.
-    /// + The caller must ensure that the object will never be accessed once this method is called.
-    ///   Accessing the object after calling this method may result in an undefined behavior.
-    /// + The caller must ensure the this method is called exactly once through out the lifetime of
-    ///   the program. Not calling this method will result in a memory leak. Calling this method
-    ///   more than once may result in an undefined behavior.
+    /// The caller of this methods must ensure that the provided length matches the number of bytes
+    /// occupied by the allocated array. Once this method is called, any further access to the data
+    /// will result in undefined behaviours.
+    ///
+    /// This method must be called exactly once throughout the lifetime of an object. Calling this
+    /// method more than once will result in undefined behaviors. Not calling this method will
+    /// result in memory leaks.
     unsafe fn thin_drop(&self, len: usize);
 }
 
-/// Trait for thin pointer to an array that can be cloned using a user-provided length.
+/// A type that owns a manually allocated array, whose length is externally known, implements this
+/// trait to provide its user a method to clone itself.
 ///
-/// # Safety
+/// # SAFETY
 ///
-/// Types that implement this trait must correctly use the user-provided length.
+/// The type that implements this trait must have ownership to the allocated array. If it has
+/// unique ownership, calling [`ThinClone::thin_clone`] allocates a new array and copies the
+/// elements over. If it has shared ownership, calling [`ThinClone::thin_clone`] performs the
+/// neccessary bookkeeping to share the array.
+///
+/// It is the user's responsibility to provide a correct length. Thus, any implementation of this
+/// trait must respect the user-provided length when [`ThinClone::thin_clone`] is called.
 pub unsafe trait ThinClone {
-    /// Clone the underlying buffer through a thin pointer.
+    /// Clones the current object.
     ///
-    /// # Safety
+    /// # SAFETY
     ///
-    /// + The caller must ensure that `len` equals the number of allocated bytes.
+    /// The caller of this methods must ensure that the provided length matches the number of bytes
+    /// occupied by the allocated array.
     unsafe fn thin_clone(&self, len: usize) -> Self;
 }
 
-/// Trait for thin pointer to an array that can be referenced using a user-provided length.
+/// A type that owns a manually allocated array, whose length is externally known, implements this
+/// trait to provide its user a method to view its bytes.
 ///
-/// # Safety
+/// # SAFETY
 ///
-/// Types that implement this trait must correctly use the user-provided length.
+/// It is the user's responsibility to provide a correct length. Thus, any implementation of this
+/// trait must respect the user-provided length when [`ThisAsBytes::thin_as_bytes`] is called.
 pub unsafe trait ThinAsBytes {
-    /// Slice into the underlying buffer through a thin pointer.
+    /// Returns a slice into the allocated array.
     ///
-    /// # Safety
+    /// # SAFETY
     ///
-    /// + The caller must ensure that `len` equals the number of allocated bytes.
+    /// The caller of this methods must ensure that the provided length matches the number of bytes
+    /// occupied by the allocated array.
     unsafe fn thin_as_bytes(&self, len: usize) -> &[u8];
 }
 
@@ -60,14 +79,14 @@ pub struct BoxDynBytes {
     phantom: PhantomData<[u8]>,
 }
 
-/// # Safety:
-///
-/// + `UniqueDynBytes` is the only owner of its data.
+// # SAFETY:
+//
+// [`BoxDynBytes`] is the only owner of its data.
 unsafe impl Send for BoxDynBytes {}
 
-/// # Safety:
-///
-/// + `UniqueDynBytes` is immutable.
+// # SAFETY:
+//
+// [`BoxDynBytes`] is immutable.
 unsafe impl Sync for BoxDynBytes {}
 
 impl From<&[u8]> for BoxDynBytes {
@@ -76,15 +95,13 @@ impl From<&[u8]> for BoxDynBytes {
             NonNull::dangling()
         } else {
             let layout = array_layout::<u8>(bytes.len());
-            // Safety:
-            // + Our layout is always guaranteed to be of a non-zero sized type due to the if
-            // statement that we have.
+            // SAFETY: Our layout is always guaranteed to be of a non-zero sized type due to the if
+            // statement that we had.
             let nullable = unsafe { std::alloc::alloc(layout) };
             let Some(ptr) = NonNull::new(nullable) else {
                 std::alloc::handle_alloc_error(layout);
             };
-            // Safety:
-            // + We are copying `bytes.len()` bytes into a buffer of the same size that we just
+            // SAFETY: We are copying `bytes.len()` bytes into a buffer of the same size that we just
             // allocated.
             unsafe {
                 std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.as_ptr(), bytes.len());
@@ -103,8 +120,7 @@ impl From<Vec<u8>> for BoxDynBytes {
         let ptr = if bytes.is_empty() {
             NonNull::dangling()
         } else {
-            // Safety:
-            // + We create a `NonNull` from the result of `Box::into_raw` which is guaranteed to be
+            // SAFETY: We create a `NonNull` from the result of `Box::into_raw` which is guaranteed to be
             // non-null and aligned.
             unsafe { NonNull::new_unchecked(Box::into_raw(bytes.into_boxed_slice()).cast()) }
         };
@@ -118,7 +134,7 @@ impl From<Vec<u8>> for BoxDynBytes {
 unsafe impl ThinDrop for BoxDynBytes {
     unsafe fn thin_drop(&self, len: usize) {
         if len > 0 {
-            // Safety:
+            // SAFETY:
             // + We only allocate using the default global allocator.
             // + We require that the caller passes in a `len` matching the number of allocated bytes.
             unsafe {
@@ -134,18 +150,16 @@ unsafe impl ThinClone for BoxDynBytes {
             NonNull::dangling()
         } else {
             let layout = array_layout::<u8>(len);
-            // Safety:
-            // + Our layout is always guaranteed to be of a non-zero sized type due to the if
-            // statement that we have.
+            // SAFETY: Our layout is always guaranteed to be of a non-zero sized type due to the if
+            // statement that we had.
             let nullable = unsafe { std::alloc::alloc(layout) };
             let Some(ptr) = NonNull::new(nullable) else {
                 std::alloc::handle_alloc_error(layout);
             };
-            // Safety:
+            // SAFETY:
             // + We require the caller to pass in a valid `len` corresponding to the number of
             // allocated bytes.
-            // + We are copying `len` bytes into a buffer of the same size that we just
-            // allocated.
+            // + We are copying `len` bytes into a buffer of the same size that we just allocated.
             unsafe {
                 std::ptr::copy_nonoverlapping(self.ptr.as_ptr(), ptr.as_ptr(), len);
             }
@@ -164,7 +178,7 @@ unsafe impl ThinAsBytes for BoxDynBytes {
         if len == 0 {
             Default::default()
         } else {
-            // Safety:
+            // SAFETY:
             // + We ensure that the pointer is aligned and the data it points to is properly
             // initialized.
             // + We have access to `&self`, thus the bytes have not been deallocated.
@@ -182,7 +196,7 @@ struct ArcDynBytesInner<T: ?Sized> {
 
 impl<T> ArcDynBytesInner<[T]> {
     #[inline]
-    fn cast(ptr: *mut T, len: usize) -> *mut Self {
+    const fn cast(ptr: *mut T, len: usize) -> *mut Self {
         // Type-casting magic to create a fat pointer to a dynamically sized type.
         let fake_slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
         fake_slice as *mut Self
@@ -196,15 +210,15 @@ pub struct ArcDynBytes {
     phantom: PhantomData<ArcDynBytesInner<[u8]>>,
 }
 
-/// # Safety:
+/// # SAFETY:
 ///
-/// + `SharedDynBytes` keeps track of the number of references to its data using an atomic counter and
-///   allows shared ownership across threads.
+/// [`ArcDynBytes`] keeps track of the number of references to its data using an atomic counter
+/// allowing shared ownership across threads.
 unsafe impl Send for ArcDynBytes {}
 
-/// # Safety:
+/// # SAFETY:
 ///
-/// + `SharedDynBytes` is immutable.
+/// [`ArcDynBytes`] is immutable.
 unsafe impl Sync for ArcDynBytes {}
 
 impl From<&[u8]> for ArcDynBytes {
@@ -213,15 +227,14 @@ impl From<&[u8]> for ArcDynBytes {
             NonNull::dangling()
         } else {
             let layout = arc_dyn_bytes_inner_layout(bytes.len());
-            // Safety:
-            // + Our layout is always guaranteed to be of a non-zero sized type due to the if
-            // statement that we have.
+            // SAFETY: Our layout is always guaranteed to be of a non-zero sized type due to the if
+            // statement that we had.
             let nullable = unsafe { std::alloc::alloc(layout) };
             let nullable_fat_ptr = ArcDynBytesInner::<[u8]>::cast(nullable, bytes.len());
             let Some(fat_ptr) = NonNull::new(nullable_fat_ptr) else {
                 std::alloc::handle_alloc_error(layout)
             };
-            // Safety:
+            // SAFETY:
             // + We just allocated for a new `ArcDynBytesInner<[T]>` with enough space to
             // contain `len` bytes.
             // + We require the caller to pass in a valid `len` corresponding to the number of
@@ -257,13 +270,12 @@ impl From<Vec<u8>> for ArcDynBytes {
 unsafe impl ThinDrop for ArcDynBytes {
     unsafe fn thin_drop(&self, len: usize) {
         if len > 0 {
-            // Safety:
-            // + We have access to `&self`, thus the pointer has not been deallocated.
+            // SAFETY: We have access to `&self`, thus the pointer has not been deallocated.
             let inner = unsafe { &*self.ptr.as_ptr() };
             if inner.count.fetch_sub(1, atomic::Ordering::Release) == 1 {
                 inner.count.load(atomic::Ordering::Acquire);
-                // Safety:
-                // + We require that the caller passes in a `len` matching the number of allocated bytes.
+                // SAFETY: We require that the caller passes in a `len` matching the number of
+                // allocated bytes.
                 unsafe {
                     std::alloc::dealloc(
                         self.ptr.as_ptr().cast::<u8>(),
@@ -280,7 +292,7 @@ unsafe impl ThinClone for ArcDynBytes {
         let ptr = if len == 0 {
             NonNull::dangling()
         } else {
-            // Safety:
+            // SAFETY:
             // + We never deallocate the pointer if the reference count is at least 1.
             // + We can deference the pointer because we are accessing it through a reference to
             // [`SharedDynBytes`] which means the reference count is at least 1.
@@ -303,10 +315,9 @@ unsafe impl ThinAsBytes for ArcDynBytes {
             Default::default()
         } else {
             let fat_ptr = ArcDynBytesInner::<[u8]>::cast(self.ptr.as_ptr().cast::<u8>(), len);
-            // Safety:
-            // + We have access to `&self`, thus the pointer has not been deallocated.
+            // SAFETY: We have access to `&self`, thus the pointer has not been deallocated.
             let ptr = unsafe { (*fat_ptr).data.as_ptr() };
-            // Safety:
+            // SAFETY:
             // + We have access to `&self`, thus the bytes have not been deallocated.
             // + We require that the caller passes a valid length for the slice.
             unsafe { std::slice::from_raw_parts(ptr, len) }
@@ -322,7 +333,7 @@ struct RcDynBytesInner<T: ?Sized> {
 
 impl<T> RcDynBytesInner<[T]> {
     #[inline]
-    fn cast(ptr: *mut T, len: usize) -> *mut Self {
+    const fn cast(ptr: *mut T, len: usize) -> *mut Self {
         // Type-casting magic to create a fat pointer to a dynamically sized type.
         let fake_slice = std::ptr::slice_from_raw_parts_mut(ptr, len);
         fake_slice as *mut Self
@@ -342,15 +353,14 @@ impl From<&[u8]> for RcDynBytes {
             NonNull::dangling()
         } else {
             let layout = rc_dyn_bytes_inner_layout(bytes.len());
-            // Safety:
-            // + Our layout is always guaranteed to be of a non-zero sized type due to the if
-            // statement that we have.
+            // SAFETY: Our layout is always guaranteed to be of a non-zero sized type due to the if
+            // statement that we had.
             let nullable = unsafe { std::alloc::alloc(layout) };
             let nullable_fat_ptr = RcDynBytesInner::<[u8]>::cast(nullable, bytes.len());
             let Some(fat_ptr) = NonNull::new(nullable_fat_ptr) else {
                 std::alloc::handle_alloc_error(layout)
             };
-            // Safety:
+            // SAFETY:
             // + We just allocated for a new `RcDynBytesInner<[T]>` with enough space to
             // contain `len` bytes.
             // + We require the caller to pass in a valid `len` corresponding to the number of
@@ -386,14 +396,13 @@ impl From<Vec<u8>> for RcDynBytes {
 unsafe impl ThinDrop for RcDynBytes {
     unsafe fn thin_drop(&self, len: usize) {
         if len > 0 {
-            // Safety:
-            // + We have access to `&self`, thus the pointer has not been deallocated.
+            // SAFETY: We have access to `&self`, thus the pointer has not been deallocated.
             let inner = unsafe { &*self.ptr.as_ptr() };
             let ref_count = inner.count.get();
             inner.count.set(ref_count - 1);
             if ref_count == 1 {
-                // Safety:
-                // + We require that the caller passes in a `len` matching the number of allocated bytes.
+                // SAFETY: We require that the caller passes in a `len` matching the number of
+                // allocated bytes.
                 unsafe {
                     std::alloc::dealloc(
                         self.ptr.as_ptr().cast::<u8>(),
@@ -410,7 +419,7 @@ unsafe impl ThinClone for RcDynBytes {
         let ptr = if len == 0 {
             NonNull::dangling()
         } else {
-            // Safety:
+            // SAFETY:
             // + We never deallocate the pointer if the reference count is at least 1.
             // + We can deference the pointer because we are accessing it through a reference to
             // [`SharedDynBytes`] which means the reference count is at least 1.
@@ -434,10 +443,9 @@ unsafe impl ThinAsBytes for RcDynBytes {
             Default::default()
         } else {
             let fat_ptr = RcDynBytesInner::<[u8]>::cast(self.ptr.as_ptr().cast::<u8>(), len);
-            // Safety:
-            // + We have access to `&self`, thus the pointer has not been deallocated.
+            // SAFETY: We have access to `&self`, thus the pointer has not been deallocated.
             let ptr = unsafe { (*fat_ptr).data.as_ptr() };
-            // Safety:
+            // SAFETY:
             // + We have access to `&self`, thus the bytes have not been deallocated.
             // + We require that the caller passes a valid length for the slice.
             unsafe { std::slice::from_raw_parts(ptr, len) }

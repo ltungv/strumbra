@@ -35,9 +35,20 @@ fn serde(raw: String, vec: Vec<String>, map: HashMap<String, String>) {
     assert_eq!(wanted.vec, rc.vec);
 
     for (k, v) in wanted.map {
-        let boxed_v = boxed.map.get(k.as_str()).expect("A existing value");
-        let arc_v = arc.map.get(k.as_str()).expect("A existing value");
-        let rc_v = rc.map.get(k.as_str()).expect("A existing value");
+        let boxed_v = boxed
+            .map
+            .get(k.as_str())
+            .unwrap_or_else(|| panic!("expected {v:?} at {k:?}"));
+
+        let arc_v = arc
+            .map
+            .get(k.as_str())
+            .unwrap_or_else(|| panic!("expected {v:?} at {k:?}"));
+
+        let rc_v = rc
+            .map
+            .get(k.as_str())
+            .unwrap_or_else(|| panic!("expected {v:?} at {k:?}"));
 
         assert_eq!(&v, boxed_v);
         assert_eq!(&v, arc_v);

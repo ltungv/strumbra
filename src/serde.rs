@@ -1,4 +1,4 @@
-//! (De)serialization for [`UmbraString`]
+//! (De)serialization for [`UmbraString`].
 
 use std::{fmt, marker::PhantomData};
 
@@ -9,7 +9,7 @@ use crate::{
 
 struct Visitor<B, const PREFIX_LENGTH: usize>(PhantomData<B>);
 
-impl<'v, B, const PREFIX_LENGTH: usize> serde::de::Visitor<'v> for Visitor<B, PREFIX_LENGTH>
+impl<B, const PREFIX_LENGTH: usize> serde::de::Visitor<'_> for Visitor<B, PREFIX_LENGTH>
 where
     B: ThinDrop + From<Vec<u8>> + for<'b> From<&'b [u8]>,
 {
